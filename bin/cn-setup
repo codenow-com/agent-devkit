@@ -36,29 +36,40 @@ have claude || have codex || have copilot || note "no coding assistant found: in
 [ -n "${CODENOW_MCP_URL:-}" ] || note "no CodeNOW MCP URL set: run cn-setup"
 name="${CODENOW_MCP_NAME:-codenow}"
 
-# 3. CodeNOW MCP server in each assistant (user scope, so every repository sees it)
+# 3. CodeNOW MCP server in each assistant (user scope, so every repository sees it). Presence is read from the
+# assistants' own config files: their "mcp list" commands connect to the server and can hang without a login.
+has_url() { [ -f "$1" ] && grep -qF "$CODENOW_MCP_URL" "$1"; }
 if [ -n "${CODENOW_MCP_URL:-}" ]; then
   if have claude; then
-    if claude mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Claude Code: CodeNOW MCP ok"
+    if has_url "$HOME/.claude.json"; then say "Claude Code: CodeNOW MCP ok"
     elif [ "$check" = 1 ]; then note "Claude Code: CodeNOW MCP missing"
-    else claude mcp add --transport http --scope user "$name" "$CODENOW_MCP_URL" >/dev/null
-         say "Claude Code: added MCP server $name; it asks for the CodeNOW login on first use"; fi
+    elif claude mcp add --transport http --scope user "$name" "$CODENOW_MCP_URL" >/dev/null 2>&1; then
+      say "Claude Code: added MCP server $name; it asks for the CodeNOW login on first use"
+    else note "Claude Code: adding the MCP server failed; try: claude mcp add --transport http --scope user $name $CODENOW_MCP_URL"; fi
   fi
+  # Codex and Copilot CLI cannot use the CodeNOW login (the tenant refuses their dynamic client registration), so
+  # they send an API key header. Codex reads the key from the CODENOW_API_KEY variable at start; the file keeps no key.
   if have codex; then
-    if codex mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Codex: CodeNOW MCP ok"
+    codex_conf="$HOME/.codex/config.toml"
+    if has_url "$codex_conf"; then say "Codex: CodeNOW MCP ok"
     elif [ "$check" = 1 ]; then note "Codex: CodeNOW MCP missing"
-    else codex mcp add "$name" --url "$CODENOW_MCP_URL" >/dev/null
-         say "Codex: added MCP server $name; log in with: codex mcp login $name"; fi
+    else
+      mkdir -p "$HOME/.codex"
+      printf '\n[mcp_servers.%s]\nurl = "%s"\nenv_http_headers = { "X-Codenow-Api-Key" = "CODENOW_API_KEY" }\n' \
+        "$name" "$CODENOW_MCP_URL" >> "$codex_conf"
+      say "Codex: added MCP server $name; it sends the API key from CODENOW_API_KEY (export it in your shell)"
+    fi
   fi
   if have copilot; then
-    if copilot mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Copilot CLI: CodeNOW MCP ok"
+    if has_url "$HOME/.copilot/mcp-config.json"; then say "Copilot CLI: CodeNOW MCP ok"
     elif [ "$check" = 1 ]; then note "Copilot CLI: CodeNOW MCP missing"
     elif [ -n "${CODENOW_API_KEY:-}" ]; then
-      copilot mcp add --transport http --header "X-Codenow-Api-Key: $CODENOW_API_KEY" "$name" "$CODENOW_MCP_URL" >/dev/null
-      say "Copilot CLI: added MCP server $name with your API key (Copilot keeps it in ~/.copilot/mcp-config.json)"
+      if copilot mcp add --transport http --header "X-Codenow-Api-Key: $CODENOW_API_KEY" "$name" "$CODENOW_MCP_URL" >/dev/null 2>&1; then
+        say "Copilot CLI: added MCP server $name (Copilot keeps the API key in ~/.copilot/mcp-config.json)"
+      else note "Copilot CLI: adding the MCP server failed"; fi
     else
-      say "Copilot CLI cannot use the CodeNOW login; add the server with an API key:"
-      say "  CODENOW_API_KEY=<key> cn-setup     (CodeNOW UI: your profile > API keys)"
+      say "Copilot CLI: run  CODENOW_API_KEY=<key> cn-setup  to add the server with an API key"
+      say "  (CodeNOW UI: your profile > API keys)"
     fi
   fi
 fi

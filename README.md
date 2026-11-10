@@ -42,9 +42,15 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 
 ## Settings and secrets
 
-`~/.codenow/config` keeps the MCP URL and the kubeconfig path (mode 600). The devkit stores no token. Claude Code and
-Codex log in to CodeNOW with OAuth. Copilot CLI cannot, so `CODENOW_API_KEY=<key> cn-setup` adds the server with an
-API key header, which Copilot keeps in `~/.copilot/mcp-config.json`.
+`~/.codenow/config` keeps the MCP URL and the kubeconfig path (mode 600). The devkit stores no token.
+
+- Claude Code logs in to CodeNOW with OAuth on first use.
+- Codex and Copilot CLI cannot use the CodeNOW login, so they send a CodeNOW API key (CodeNOW UI: your profile → API
+  keys) in the `X-Codenow-Api-Key` header.
+  - Codex reads it from the `CODENOW_API_KEY` environment variable when it starts; `~/.codex/config.toml` keeps no
+    key. Export the variable in your shell, for example from the macOS keychain:
+    `export CODENOW_API_KEY="$(security find-generic-password -s codenow-api-key -w)"`.
+  - Copilot CLI keeps the key in `~/.copilot/mcp-config.json`: run `CODENOW_API_KEY=<key> cn-setup` once.
 
 ## Uninstall
 
