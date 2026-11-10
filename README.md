@@ -61,3 +61,7 @@ rm -rf ~/.claude/skills/codenow-new-agent ~/.codex/skills/codenow-new-agent ~/.c
 
 Remove the `codenow` MCP server with `claude mcp remove codenow`, `codex mcp remove codenow` and
 `copilot mcp remove codenow`.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
