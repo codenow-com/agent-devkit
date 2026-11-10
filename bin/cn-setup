@@ -96,8 +96,13 @@ done
 if [ -n "${KUBECONFIG_FILE:-}" ]; then
   kc="${KUBECONFIG_FILE/#\~/$HOME}"
   if [ ! -f "$kc" ]; then note "kubeconfig not found: $kc"
-  elif have kubectl && KUBECONFIG="$kc" kubectl version --request-timeout=15s >/dev/null 2>&1; then say "kubeconfig: ok"
-  else note "kubeconfig: kubectl cannot reach the cluster (a login may be needed)"; fi
+  elif ! have kubectl; then note "kubectl is missing (needed to read the agent's Secret)"
+  else
+    rc=0; KUBECONFIG="$kc" run_limited 20 kubectl version --request-timeout=15s || rc=$?
+    if [ "$rc" = 0 ]; then say "kubeconfig: ok"
+    elif [ "$rc" = 124 ]; then note "kubeconfig: no answer in 20 s; the cluster login probably waits in the browser: run  KUBECONFIG=$kc kubectl get ns"
+    else note "kubeconfig: kubectl cannot reach the cluster"; fi
+  fi
 fi
 
 echo

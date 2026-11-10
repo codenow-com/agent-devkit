@@ -34,3 +34,16 @@ ask_setting() {  # ask_setting <name> <question>: keeps the current value; asks 
     save_setting "$name" "$value"
   fi
 }
+
+# run_limited <seconds> <command...>: runs a command, stops it after the limit (macOS has no timeout(1)).
+# Returns the command's status, or 124 when it ran out of time.
+run_limited() {
+  local limit="$1"; shift
+  "$@" >/dev/null 2>&1 </dev/null &
+  local pid=$! waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge "$limit" ]; then kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; return 124; fi
+    sleep 1; waited=$((waited + 1))
+  done
+  wait "$pid"
+}
