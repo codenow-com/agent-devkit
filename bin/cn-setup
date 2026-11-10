@@ -98,6 +98,7 @@ if [ -n "${KUBECONFIG_FILE:-}" ]; then
   if [ ! -f "$kc" ]; then note "kubeconfig not found: $kc"
   elif ! have kubectl; then note "kubectl is missing (needed to read the agent's Secret)"
   else
+    say "kubeconfig: checking the cluster; a browser may open for the CodeNOW login of the cluster (pinniped)"
     rc=0; run_limited 20 env KUBECONFIG="$kc" kubectl version --request-timeout=15s || rc=$?
     if [ "$rc" = 0 ]; then say "kubeconfig: ok"
     elif [ "$rc" = 124 ]; then note "kubeconfig: no answer in 20 s; the cluster login probably waits in the browser: run  KUBECONFIG=$kc kubectl get ns"
