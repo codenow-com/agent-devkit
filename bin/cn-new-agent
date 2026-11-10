@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# cn-new-agent: create a CodeNOW agent with your coding assistant. The assistant asks what the agent does, its swarm
+# and name, creates it through the CodeNOW MCP server and clones its repository here.
+#
+#   cn-new-agent                     use the first assistant found: claude, codex, copilot
+#   cn-new-agent --with codex        pick one
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+CN_CMD=cn-new-agent
+
+with=""
+[ "${1:-}" = "--with" ] && with="${2:-}"
+if [ -z "$with" ]; then
+  for candidate in claude codex copilot; do have "$candidate" && { with="$candidate"; break; }; done
+fi
+[ -n "$with" ] || die "no coding assistant found: install Claude Code, Codex or GitHub Copilot CLI"
+have "$with" || die "$with is not installed"
+
+prompt="Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into $(pwd)."
+say "starting $with in $(pwd)"
+case "$with" in
+  claude) exec claude "/codenow-new-agent" ;;
+  codex) exec codex "$prompt" ;;
+  copilot) exec copilot -i "$prompt" ;;
+  *) die "unknown assistant: $with (claude, codex or copilot)" ;;
+esac

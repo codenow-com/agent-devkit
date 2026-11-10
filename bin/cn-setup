@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# cn-setup: prepare this computer for developing CodeNOW agents.
+#
+#   cn-setup           set up what is missing; asks once for the MCP URL of your tenant and the kubeconfig
+#   cn-setup --check   only report (the same as cn-doctor)
+#
+# It checks the tools, adds the CodeNOW MCP server to Claude Code, Codex and GitHub Copilot CLI, installs the
+# devkit skills into them, and checks the kubeconfig. Settings: ~/.codenow/config. It never stores a token.
+# Environment: CODENOW_MCP_URL, KUBECONFIG_FILE, CODENOW_MCP_NAME (default codenow), CODENOW_API_KEY (Copilot only).
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+CN_CMD=cn-setup
+check=0
+[ "${1:-}" = "--check" ] && check=1 && CN_CMD=cn-doctor
+load_config
+problems=0
+note() { say "$*"; problems=$((problems + 1)); }
+
+# 1. Tools
+for tool in git curl python3; do have "$tool" || die "install $tool first"; done
+if have docker && docker compose version >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then say "Docker with Compose: ok"; else note "Docker is installed but not running (needed for the sandbox)"; fi
+else
+  note "Docker with Compose v2 is missing (needed for the sandbox)"
+fi
+for tool in kubectl conda claude codex copilot; do
+  if have "$tool"; then say "found $tool"; else say "not found: $tool (optional)"; fi
+done
+have claude || have codex || have copilot || note "no coding assistant found: install Claude Code, Codex or GitHub Copilot CLI"
+
+# 2. Settings
+[ "$check" = 1 ] || ask_setting CODENOW_MCP_URL "CodeNOW MCP URL of your tenant (https://mcp-server-<tenant>.<domain>/mcp):"
+[ "$check" = 1 ] || ask_setting KUBECONFIG_FILE "path of the kubeconfig from the CodeNOW UI (Clusters > Cluster Access), empty to skip:"
+[ -n "${CODENOW_MCP_URL:-}" ] || note "no CodeNOW MCP URL set: run cn-setup"
+name="${CODENOW_MCP_NAME:-codenow}"
+
+# 3. CodeNOW MCP server in each assistant (user scope, so every repository sees it)
+if [ -n "${CODENOW_MCP_URL:-}" ]; then
+  if have claude; then
+    if claude mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Claude Code: CodeNOW MCP ok"
+    elif [ "$check" = 1 ]; then note "Claude Code: CodeNOW MCP missing"
+    else claude mcp add --transport http --scope user "$name" "$CODENOW_MCP_URL" >/dev/null
+         say "Claude Code: added MCP server $name; it asks for the CodeNOW login on first use"; fi
+  fi
+  if have codex; then
+    if codex mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Codex: CodeNOW MCP ok"
+    elif [ "$check" = 1 ]; then note "Codex: CodeNOW MCP missing"
+    else codex mcp add "$name" --url "$CODENOW_MCP_URL" >/dev/null
+         say "Codex: added MCP server $name; log in with: codex mcp login $name"; fi
+  fi
+  if have copilot; then
+    if copilot mcp list 2>/dev/null | grep -qF "$CODENOW_MCP_URL"; then say "Copilot CLI: CodeNOW MCP ok"
+    elif [ "$check" = 1 ]; then note "Copilot CLI: CodeNOW MCP missing"
+    elif [ -n "${CODENOW_API_KEY:-}" ]; then
+      copilot mcp add --transport http --header "X-Codenow-Api-Key: $CODENOW_API_KEY" "$name" "$CODENOW_MCP_URL" >/dev/null
+      say "Copilot CLI: added MCP server $name with your API key (Copilot keeps it in ~/.copilot/mcp-config.json)"
+    else
+      say "Copilot CLI cannot use the CodeNOW login; add the server with an API key:"
+      say "  CODENOW_API_KEY=<key> cn-setup     (CodeNOW UI: your profile > API keys)"
+    fi
+  fi
+fi
+
+# 4. Devkit skills for each assistant (copied, refreshed by cn-update)
+for target in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.copilot/skills"; do
+  case "$target" in
+    */.claude/*) have claude || continue ;;
+    */.codex/*) have codex || continue ;;
+    */.copilot/*) have copilot || continue ;;
+  esac
+  for skill in "$DEVKIT_DIR"/skills/*/; do
+    skill_name="$(basename "$skill")"
+    if [ "$check" = 1 ]; then
+      [ -f "$target/$skill_name/SKILL.md" ] || note "skill $skill_name missing in $target"
+    else
+      mkdir -p "$target"; rm -rf "${target:?}/$skill_name"; cp -R "$skill" "$target/$skill_name"
+    fi
+  done
+done
+[ "$check" = 1 ] || say "skills installed: $(cd "$DEVKIT_DIR/skills" && ls | tr '\n' ' ')"
+
+# 5. kubeconfig
+if [ -n "${KUBECONFIG_FILE:-}" ]; then
+  kc="${KUBECONFIG_FILE/#\~/$HOME}"
+  if [ ! -f "$kc" ]; then note "kubeconfig not found: $kc"
+  elif have kubectl && KUBECONFIG="$kc" kubectl version --request-timeout=15s >/dev/null 2>&1; then say "kubeconfig: ok"
+  else note "kubeconfig: kubectl cannot reach the cluster (a login may be needed)"; fi
+fi
+
+echo
+if [ "$check" = 1 ]; then
+  [ "$problems" = 0 ] && say "all good" || { say "$problems problem(s); run cn-setup"; exit 1; }
+else
+  say "done. Next: cn-new-agent (creates an agent with your coding assistant)"
+fi

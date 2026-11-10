@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# cn-sandbox: run the local sandbox of the agent repository you are in (its own sandbox/sandbox.sh, so the
+# sandbox always matches the agent's template version).
+#
+#   cn-sandbox up | run <pipeline> [subject] [json] | logs | events | status | down
+set -euo pipefail
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "cn-sandbox: not inside a git repository" >&2; exit 1; }
+[ -f "$root/sandbox/sandbox.sh" ] || { echo "cn-sandbox: $root has no sandbox/sandbox.sh (an agent from the CodeNOW Agent SDK template 1.1.0 or newer has one)" >&2; exit 1; }
+cd "$root"
+exec bash sandbox/sandbox.sh "$@"

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# cn-update: update the devkit to its newest release and refresh the commands and skills.
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+CN_CMD=cn-update
+
+repo="$(git -C "$DEVKIT_DIR" remote get-url origin)"
+CODENOW_DEVKIT_REPO="$repo" bash "$DEVKIT_DIR/install.sh"
+load_config
+bash "$DEVKIT_DIR/bin/cn-setup" </dev/null >/dev/null && say "skills refreshed"
