@@ -118,6 +118,20 @@ if [ -n "${CODENOW_MCP_URL:-}" ]; then
   [ "${vscode_rc:-0}" = 0 ] || problems=$((problems + 1))
 fi
 
+# 3b. The API key for cn-call and cn-wait, which assistants run to wait for builds and deployments. It lives in its
+# own file (mode 600): the config file never holds a token. Optional for Claude Code, which uses the CodeNOW login.
+credentials="$CODENOW_HOME/credentials"
+if [ "$check" != 1 ] && [ -n "${CODENOW_API_KEY:-}" ]; then
+  (umask 077; printf 'CODENOW_API_KEY=%q\n' "$CODENOW_API_KEY" > "$credentials")
+  say "saved the API key for cn-call and cn-wait in $credentials (mode 600)"
+fi
+if [ -f "$credentials" ] || [ -n "${CODENOW_API_KEY:-}" ]; then
+  if run_limited 30 "$DEVKIT_DIR/bin/cn-call" agent_swarms_list >/dev/null 2>&1; then say "cn-call and cn-wait: CodeNOW API key ok"
+  else note "cn-call and cn-wait: the CodeNOW API key does not work; run  CODENOW_API_KEY=<key> cn-setup"; fi
+else
+  say "cn-call and cn-wait: no API key (optional; for Copilot and Codex run  CODENOW_API_KEY=<key> cn-setup)"
+fi
+
 # 4. Devkit skills for each assistant (copied, refreshed by cn-update)
 for target in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.copilot/skills"; do
   case "$target" in

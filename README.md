@@ -30,6 +30,8 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest CodeNOW Agent SDK template and clones the repository. |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
+| `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s, under the time limit that assistants put on a command; exit code 3 means "still running, run it again". Needs the API key (below). |
+| `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. Needs the API key (below). |
 
 ## The flow
 
@@ -42,7 +44,9 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 
 ## Settings and secrets
 
-`~/.codenow/config` keeps the MCP URL and the kubeconfig path (mode 600). The devkit stores no token.
+`~/.codenow/config` keeps the MCP URL and the kubeconfig path (mode 600), never a token. `CODENOW_API_KEY=<key> cn-setup`
+also saves the key in `~/.codenow/credentials` (mode 600) for `cn-wait` and `cn-call`; they read `CODENOW_API_KEY`
+first when it is set.
 
 - Claude Code logs in to CodeNOW with OAuth on first use.
 - Codex and Copilot CLI cannot use the CodeNOW login, so they send a CodeNOW API key (CodeNOW UI: your profile → API

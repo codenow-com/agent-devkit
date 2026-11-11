@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# cn-wait: wait for a CodeNOW build or deployment and print each change; at most 50 s per run (--max <s>).
+#
+#   cn-wait build <swarm> <agent> [build id]     exit 0 done, 1 failed, 3 still running: run it again
+#   cn-wait deploy <swarm> <environment>
+#
+# The MCP URL comes from ~/.codenow/config, the API key from CODENOW_API_KEY or ~/.codenow/credentials (cn-setup).
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+exec python3 -I "$(cd "$(dirname "$src")/.." && pwd)/lib/cn_mcp.py" wait "$@"
