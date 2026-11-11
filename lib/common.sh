@@ -50,6 +50,8 @@ install_hint() {
       claude) echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
       codex) echo "npm install -g @openai/codex" ;;
       copilot) echo "npm install -g @github/copilot" ;;
+      node) echo "brew install node" ;;
+      openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
       *) echo "brew install $1" ;;
     esac
   else
@@ -62,6 +64,8 @@ install_hint() {
       claude) echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
       codex) echo "npm install -g @openai/codex  (needs Node.js 22+)" ;;
       copilot) echo "npm install -g @github/copilot  (needs Node.js 22+)" ;;
+      node) echo "Node.js 22 LTS: https://nodejs.org/en/download (or nvm install 22)" ;;
+      openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
       *) echo "sudo apt-get install -y $1" ;;
     esac
   fi

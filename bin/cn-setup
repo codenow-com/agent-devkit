@@ -53,6 +53,15 @@ fi
 for tool in kubectl pinniped; do
   if have "$tool"; then say "found $tool"; else note "$tool is missing (needed for .env):  $(install_hint "$tool")"; fi
 done
+# OpenSpec: every change of an agent goes through it (AGENTS.md of the agent template); the template's files need 1.17+.
+openspec_min=1.17.0
+if have openspec; then
+  openspec_v="$(openspec --version 2>/dev/null | tr -d '[:space:]')"
+  if [ "$(printf '%s\n%s\n' "$openspec_min" "$openspec_v" | sort -V | head -n 1)" = "$openspec_min" ]; then
+    say "found openspec $openspec_v"
+  else note "openspec $openspec_v is older than $openspec_min:  $(install_hint openspec)"; fi
+elif have npm; then note "openspec is missing (every agent change goes through OpenSpec):  $(install_hint openspec)"
+else note "openspec is missing and needs Node.js:  $(install_hint node), then  $(install_hint openspec)"; fi
 have conda && say "found conda" || say "not found: conda (optional; a .venv works too)"
 for tool in claude codex copilot; do
   if have "$tool"; then say "found $tool"; else say "not found: $tool (optional):  $(install_hint "$tool")"; fi
