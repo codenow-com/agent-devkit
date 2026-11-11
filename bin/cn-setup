@@ -19,14 +19,20 @@ problems=0
 note() { say "$*"; problems=$((problems + 1)); }
 
 # 1. Tools
-for tool in git curl python3; do have "$tool" || die "install $tool first"; done
+for tool in git curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
 if have docker && docker compose version >/dev/null 2>&1; then
-  if docker info >/dev/null 2>&1; then say "Docker with Compose: ok"; else note "Docker is installed but not running (needed for the sandbox)"; fi
+  if docker info >/dev/null 2>&1; then say "Docker with Compose: ok"
+  else note "Docker is installed but this user cannot use it (not running, or not in the docker group: log in again)"; fi
 else
-  note "Docker with Compose v2 is missing (needed for the sandbox)"
+  note "Docker with Compose v2 is missing (needed for the sandbox):  $(install_hint docker)"
 fi
-for tool in kubectl conda claude codex copilot; do
-  if have "$tool"; then say "found $tool"; else say "not found: $tool (optional)"; fi
+# kubectl reads the agent's Secret for .env; the CodeNOW kubeconfig logs in through the pinniped CLI.
+for tool in kubectl pinniped; do
+  if have "$tool"; then say "found $tool"; else note "$tool is missing (needed for .env):  $(install_hint "$tool")"; fi
+done
+have conda && say "found conda" || say "not found: conda (optional; a .venv works too)"
+for tool in claude codex copilot; do
+  if have "$tool"; then say "found $tool"; else say "not found: $tool (optional):  $(install_hint "$tool")"; fi
 done
 have claude || have codex || have copilot || note "no coding assistant found: install Claude Code, Codex or GitHub Copilot CLI"
 
@@ -109,7 +115,7 @@ fi
 # 6. The CodeNOW Agent SDK (sdlc-agent-kernel) is not on public PyPI: pip must find it through the developer's
 # pip.conf (the tenant's PyPI index), or the agent repository needs the wheel in sandbox/wheels/.
 if ! python3 -m pip --version >/dev/null 2>&1; then
-  note "pip is missing (Ubuntu/Debian: sudo apt-get install -y python3-pip python3-venv)"
+  note "pip is missing:  $(install_hint pip)"
 else
   tmp="$(mktemp -d)"; rc=0
   run_limited 60 python3 -m pip download --no-deps --quiet --disable-pip-version-check -d "$tmp" sdlc-agent-kernel \
@@ -117,10 +123,23 @@ else
   rm -rf "$tmp"
   if [ "$rc" = 0 ]; then say "CodeNOW Agent SDK: pip finds sdlc-agent-kernel"
   else
-    note "CodeNOW Agent SDK: pip does not find sdlc-agent-kernel. Add your tenant's PyPI index to pip.conf"
-    say "  (python3 -m pip config set global.extra-index-url <index URL>), or put the SDK wheel into the agent's sandbox/wheels/"
+    note "CodeNOW Agent SDK: pip does not find sdlc-agent-kernel (the tenant's PyPI index is missing or not readable)"
+    say "  1. the index URL: CodeNOW UI > Libraries > sdlc-agent-kernel > Setup Instructions"
+    say "     (usually https://codenow.jfrog.io/artifactory/api/pypi/<tenant>-pip/simple)"
+    say "  2. your JFrog token (a token without Read on the index gets 403, and pip says only 'from versions: none';"
+    say "     your JFrog admin grants Read)"
+    say "  3. add  https://<user>:<token>@<index host and path>  under extra-index-url in your pip.conf, keep"
+    say "     https://pypi.org/simple there too, and  chmod 600  the file"
   fi
 fi
+# A pip.conf that holds credentials must not be readable by other users.
+for f in "$HOME/.pip/pip.conf" "$HOME/.config/pip/pip.conf" "$HOME/Library/Application Support/pip/pip.conf"; do
+  [ -f "$f" ] && grep -q '://[^/@ ]*@' "$f" 2>/dev/null || continue
+  case "$(ls -l "$f" | cut -c5-10)" in
+    ------) ;;
+    *) note "pip.conf with credentials is readable by other users: chmod 600 \"$f\"" ;;
+  esac
+done
 
 echo
 if [ "$check" = 1 ]; then

@@ -35,6 +35,38 @@ ask_setting() {  # ask_setting <name> <question>: keeps the current value; asks 
   fi
 }
 
+# install_hint <tool>: the command that installs a tool on this OS (printed, never run: some need sudo).
+install_hint() {
+  local os arch
+  os="$(uname -s)"; arch="$(uname -m)"
+  case "$arch" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; esac
+  if [ "$os" = Darwin ]; then
+    case "$1" in
+      git) echo "xcode-select --install" ;;
+      docker) echo "install Docker Desktop or OrbStack (https://orbstack.dev)" ;;
+      kubectl) echo "brew install kubectl" ;;
+      pinniped) echo "brew install vmware-tanzu/pinniped/pinniped-cli" ;;
+      pip) echo "brew install python@3.12" ;;
+      claude) echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
+      codex) echo "npm install -g @openai/codex" ;;
+      copilot) echo "npm install -g @github/copilot" ;;
+      *) echo "brew install $1" ;;
+    esac
+  else
+    case "$1" in
+      git) echo "sudo apt-get install -y git" ;;
+      docker) echo "curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker \$USER  (then log in again)" ;;
+      kubectl) echo "mkdir -p ~/.local/bin && curl -fsSLo ~/.local/bin/kubectl https://dl.k8s.io/release/\$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/$arch/kubectl && chmod +x ~/.local/bin/kubectl" ;;
+      pinniped) echo "mkdir -p ~/.local/bin && curl -fsSLo ~/.local/bin/pinniped https://get.pinniped.dev/latest/pinniped-cli-linux-$arch && chmod +x ~/.local/bin/pinniped" ;;
+      pip) echo "sudo apt-get install -y python3-pip python3-venv" ;;
+      claude) echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
+      codex) echo "npm install -g @openai/codex  (needs Node.js 22+)" ;;
+      copilot) echo "npm install -g @github/copilot  (needs Node.js 22+)" ;;
+      *) echo "sudo apt-get install -y $1" ;;
+    esac
+  fi
+}
+
 # run_limited <seconds> <command...>: runs a command, stops it after the limit (macOS has no timeout(1)).
 # Returns the command's status, or 124 when it ran out of time.
 run_limited() {
