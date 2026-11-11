@@ -25,7 +25,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 
 | Command | Does |
 |---|---|
-| `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex and Copilot CLI, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. |
+| `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. |
 | `cn-doctor` | Reports what is there and what is missing. Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest CodeNOW Agent SDK template and clones the repository. |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. |
@@ -51,6 +51,14 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
     key. Export the variable in your shell, for example from the macOS keychain:
     `export CODENOW_API_KEY="$(security find-generic-password -s codenow-api-key -w)"`.
   - Copilot CLI keeps the key in `~/.copilot/mcp-config.json`: run `CODENOW_API_KEY=<key> cn-setup` once.
+- VS Code Copilot Chat: `cn-setup` adds the server to the user-level `mcp.json` of VS Code (and VS Code Insiders). The
+  file keeps no key: on the first start of the server (Command Palette: MCP: List Servers, the server, Start Server)
+  VS Code asks for the API key and keeps it in its own secret storage. Other servers in the file stay; a file with
+  comments is not changed, and `cn-setup` prints the lines to add by hand.
+  - Use the chat in the Interactive mode, not Autopilot: in Autopilot the assistant cannot ask you to confirm a change
+    in CodeNOW, so it stops at the first one.
+  - `cn-new-agent` cannot start the chat in VS Code. Open the folder in VS Code and write in the chat: "Use the
+    codenow-new-agent skill to create a new CodeNOW agent and clone it into this folder."
 
 ## Uninstall
 

@@ -110,6 +110,12 @@ if [ -n "${CODENOW_MCP_URL:-}" ]; then
       say "  (CodeNOW UI: your profile > API keys)"
     fi
   fi
+  # VS Code Copilot Chat reads the user-level mcp.json. The file keeps no key: VS Code asks for it once
+  # (${input:...}) and keeps it in its own secret storage. Other servers in the file stay as they are.
+  mode=apply; [ "$check" = 1 ] && mode=check
+  vscode_out="$(python3 -I "$DEVKIT_DIR/lib/vscode_mcp.py" "$mode" "$name" "$CODENOW_MCP_URL" 2>&1)" || vscode_rc=$?
+  while IFS= read -r line; do [ -n "$line" ] && echo "${CN_CMD:-cn}: $line"; done <<< "$vscode_out"
+  [ "${vscode_rc:-0}" = 0 ] || problems=$((problems + 1))
 fi
 
 # 4. Devkit skills for each assistant (copied, refreshed by cn-update)
@@ -117,7 +123,7 @@ for target in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.copilot/skill
   case "$target" in
     */.claude/*) have claude || continue ;;
     */.codex/*) have codex || continue ;;
-    */.copilot/*) have copilot || continue ;;
+    */.copilot/*) have copilot || have code || continue ;;  # VS Code Copilot Chat reads ~/.copilot/skills too
   esac
   for skill in "$DEVKIT_DIR"/skills/*/; do
     skill_name="$(basename "$skill")"
