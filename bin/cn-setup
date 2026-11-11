@@ -20,6 +20,29 @@ note() { say "$*"; problems=$((problems + 1)); }
 
 # 1. Tools
 for tool in git curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
+
+# The devkit itself: its version against the newest release, local changes, the cn-* links and the PATH.
+if git -C "$DEVKIT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  current="$(git -C "$DEVKIT_DIR" describe --tags --exact-match 2>/dev/null || true)"
+  newest="$(git -C "$DEVKIT_DIR" ls-remote --tags --refs origin 'v*' 2>/dev/null | sed 's#.*refs/tags/##' \
+    | sort -V | tail -n 1 || true)"
+  if [ -z "$current" ]; then note "devkit: not on a release tag ($(git -C "$DEVKIT_DIR" rev-parse --short HEAD)): run cn-update"
+  elif [ -z "$newest" ]; then say "devkit $current (cannot reach $(git -C "$DEVKIT_DIR" remote get-url origin) to compare)"
+  elif [ "$current" != "$newest" ] && [ "$(printf '%s\n%s\n' "$current" "$newest" | sort -V | tail -n 1)" = "$newest" ]; then
+    note "devkit $current is old; $newest is out: run cn-update"
+  else say "devkit $current (newest)"; fi
+  [ -z "$(git -C "$DEVKIT_DIR" status --porcelain 2>/dev/null)" ] \
+    || note "devkit: files in $DEVKIT_DIR were changed; cn-update keeps them only until the next release (git -C $DEVKIT_DIR status)"
+fi
+for cmd in "$DEVKIT_DIR"/bin/cn-*; do
+  found="$(command -v "$(basename "$cmd")" 2>/dev/null || true)"
+  if [ -z "$found" ]; then note "$(basename "$cmd") is not in PATH: run the devkit install.sh again, then open a new terminal"
+  elif [ "$(cd "$(dirname "$found")" && cd "$(dirname "$(readlink "$found" || echo "$found")")" && pwd)" != "$DEVKIT_DIR/bin" ]; then
+    note "$(basename "$cmd") in PATH is $found, not this devkit's: remove it or put ~/.local/bin first in PATH"
+  fi
+done
+[ ! -f "$CODENOW_CONFIG" ] || [ "$(ls -l "$CODENOW_CONFIG" | cut -c5-10)" = "------" ] \
+  || note "$CODENOW_CONFIG is readable by other users: chmod 600 $CODENOW_CONFIG"
 if have docker && docker compose version >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then say "Docker with Compose: ok"
   else note "Docker is installed but this user cannot use it (not running, or not in the docker group: log in again)"; fi
@@ -90,7 +113,10 @@ for target in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.copilot/skill
   for skill in "$DEVKIT_DIR"/skills/*/; do
     skill_name="$(basename "$skill")"
     if [ "$check" = 1 ]; then
-      [ -f "$target/$skill_name/SKILL.md" ] || note "skill $skill_name missing in $target"
+      if [ ! -f "$target/$skill_name/SKILL.md" ]; then note "skill $skill_name missing in $target: run cn-setup"
+      elif ! diff -rq "$skill" "$target/$skill_name" >/dev/null 2>&1; then
+        note "skill $skill_name in $target differs from the devkit's: run cn-setup"
+      fi
     else
       mkdir -p "$target"; rm -rf "${target:?}/$skill_name"; cp -R "$skill" "$target/$skill_name"
     fi
@@ -126,9 +152,9 @@ else
     note "CodeNOW Agent SDK: pip does not find sdlc-agent-kernel (the tenant's PyPI index is missing or not readable)"
     say "  1. the index URL: CodeNOW UI > Libraries > sdlc-agent-kernel > Setup Instructions"
     say "     (usually https://codenow.jfrog.io/artifactory/api/pypi/<tenant>-pip/simple)"
-    say "  2. your JFrog token (a token without Read on the index gets 403, and pip says only 'from versions: none';"
-    say "     your JFrog admin grants Read)"
-    say "  3. add  https://<user>:<token>@<index host and path>  under extra-index-url in your pip.conf, keep"
+    say "  2. a token: CodeNOW UI > gear icon > Profile > Keys & Tokens > Artifact Repository Tokens > Generate token"
+    say "     (a token without Read on the index gets 403, and pip says only 'from versions: none')"
+    say "  3. add  https://<CodeNOW user>:<token>@<index host and path>  under extra-index-url in your pip.conf, keep"
     say "     https://pypi.org/simple there too, and  chmod 600  the file"
   fi
 fi
