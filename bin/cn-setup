@@ -106,6 +106,22 @@ if [ -n "${KUBECONFIG_FILE:-}" ]; then
   fi
 fi
 
+# 6. The CodeNOW Agent SDK (sdlc-agent-kernel) is not on public PyPI: pip must find it through the developer's
+# pip.conf (the tenant's PyPI index), or the agent repository needs the wheel in sandbox/wheels/.
+if ! python3 -m pip --version >/dev/null 2>&1; then
+  note "pip is missing (Ubuntu/Debian: sudo apt-get install -y python3-pip python3-venv)"
+else
+  tmp="$(mktemp -d)"; rc=0
+  run_limited 60 python3 -m pip download --no-deps --quiet --disable-pip-version-check -d "$tmp" sdlc-agent-kernel \
+    >/dev/null 2>&1 || rc=$?
+  rm -rf "$tmp"
+  if [ "$rc" = 0 ]; then say "CodeNOW Agent SDK: pip finds sdlc-agent-kernel"
+  else
+    note "CodeNOW Agent SDK: pip does not find sdlc-agent-kernel. Add your tenant's PyPI index to pip.conf"
+    say "  (python3 -m pip config set global.extra-index-url <index URL>), or put the SDK wheel into the agent's sandbox/wheels/"
+  fi
+fi
+
 echo
 if [ "$check" = 1 ]; then
   [ "$problems" = 0 ] && say "all good" || { say "$problems problem(s); run cn-setup"; exit 1; }

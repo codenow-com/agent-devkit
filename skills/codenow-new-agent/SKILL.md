@@ -1,28 +1,37 @@
 ---
 name: codenow-new-agent
-description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, create the agent from the newest CodeNOW Agent SDK template through the CodeNOW MCP server, wait until it is ready and clone its repository, then hand over to the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
+description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, create the agent from the newest CodeNOW Agent SDK template through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue in the same session with the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
 ---
 
 # Create a new CodeNOW agent
 
-Ask one question at a time and wait for the answer. Say what you will create before each create call. The CodeNOW
-MCP server's tools have a prefix that depends on its name in your client (for example `mcp__codenow__agents_list`);
-the steps name the operation only.
+Ask one question at a time and wait for the answer. When a question has fixed options, use the client's choice tool
+(in Claude Code `AskUserQuestion`, recommended option first); otherwise ask in plain text. Say what you will create
+before each create call.
 
-## 0. Check
+## 0. Check and pick the MCP server
 
-`agent_swarms_list` answers. If the CodeNOW MCP server is missing or not logged in, tell the user to run `cn-setup`
-(and for Codex `codex mcp login codenow`), then start again.
+- Read `CODENOW_MCP_URL` from `~/.codenow/config`. Use the MCP server whose URL is that one; its tool prefix depends
+  on the name in your client (for example `mcp__codenow__…` or `mcp__codenow-demo__…`). Do not ask the user which
+  server to use and do not call other CodeNOW servers. If the client has no server with that URL, tell the user to
+  run `cn-setup`.
+- `agent_swarms_list` answers. If it does not: in Claude Code the user logs in through `/mcp`; Codex and Copilot CLI
+  need a CodeNOW API key (`CODENOW_API_KEY`, see `cn-setup`). Then start again.
 
 ## 1. What the agent does
 
-Ask for one sentence: what the agent does, for whom. Suggest a name from it: lower case letters, digits and dashes,
-for example `invoice-reader`. The name becomes the agent id and the repository name.
+Ask for one sentence: what the agent does, for whom. Suggest a name from it. CodeNOW makes the agent id and the
+repository name from the name, and it refuses some names with `400 Constraint Violation … invalid name`:
+
+- lower case letters, digits and dashes, starting with a letter, for example `invoice-reader`;
+- every part between dashes starts with a letter: `invoice-reader2` and `omi-agent2` pass, `invoice-reader-2` fails
+  (observed on the demo tenant; the API does not state the rule);
+- the name is not used in the swarm yet (`agents_list`).
 
 ## 2. Swarm
 
 List the swarms with `agent_swarms_list`. A swarm groups agents that call each other and are deployed together.
-The user picks one, or names a new one: use letters, digits and spaces only, with no diacritics (CodeNOW answers
+The user picks one, or names a new one: letters, digits and spaces only, with no diacritics (CodeNOW answers
 `400 invalid name` otherwise). Create it with `agent_swarm_create` (`name`, `description`).
 
 ## 3. Template and repository
@@ -30,7 +39,8 @@ The user picks one, or names a new one: use letters, digits and spaces only, wit
 - `templates_agent_list`: take the highest version of `codenow-langchain-agent-sdk` (`custom: true`).
 - `scm_providers_list` and `scm_spaces_list`: the CodeNOW provider (`codenow`) and its space; ask when there is a
   choice.
-- `agents_create` with `agentSwarmId`, `name`, `template: {id, version, custom: true}` and
+- `agents_create` with `agentSwarmId`, `name`, `description` (the sentence from step 1),
+  `template: {id, version, custom: true}` and
   `scm: {action: CREATE, providerType, providerId, spaceId, existingRepository: false, monoRepository: false}`.
 - Wait with `agents_list` until the agent is `READY` (`agents_get` answers `400 … is not ready` until then). Take
   `scm.httpAddress`; the repository name carries the account prefix.
@@ -39,13 +49,11 @@ The user picks one, or names a new one: use letters, digits and spaces only, wit
 
 Ask for the parent folder (default: the current folder) and run `git clone <httpAddress> <agent name>` there.
 
-## 5. Hand over
+## 5. Continue with the start skill
 
-Tell the user:
+Do not ask the user to open a new session. Read `<agent name>/.claude/skills/start/SKILL.md` (Codex and Copilot:
+`<agent name>/.agents/skills/start/SKILL.md`) and do its steps now, with the cloned repository as the working folder
+for every command. Its step 1 is already done: you know the swarm and the agent.
 
-1. The agent will run under a service account owned by a team. If there is none yet, create it now in the CodeNOW
-   UI: Account Settings → Users & Teams → the team → Service Accounts → Create Service Account (permissions "Follow
-   team"), and copy its UUID (the magnifier of the account). The team needs the model grants at the AI gateway.
-2. Open the new repository in the coding assistant (`cd <agent name>`, then `claude`, `codex` or `copilot`). The
-   repository's `start` skill does the rest: personal-dev environment, first release, deployment with the service
-   account, CI triggers, `.env` and the first run in the local sandbox. Claude Code offers it by itself.
+Tell the user at the end that daily work happens in a session opened in the repository (`cd <agent name>`, then
+`claude`, `codex` or `copilot`): there the repository's skills (`/build-agent`, `/sandbox` and others) are commands.

@@ -19,7 +19,7 @@ case "$(uname -s)" in
   Darwin|Linux) ;;
   *) die "macOS or Linux only (on Windows use WSL)" ;;
 esac
-command -v git >/dev/null 2>&1 || die "git is missing"
+command -v git >/dev/null 2>&1 || die "git is missing. Install it first: macOS  xcode-select --install ; Ubuntu/Debian  sudo apt-get install -y git"
 
 mkdir -p "$home_dir" "$bin_dir"
 if [ -d "$dest/.git" ]; then
@@ -47,7 +47,13 @@ done
 echo "install: commands linked into $bin_dir: $(cd "$dest/bin" && ls cn-* | tr '\n' ' ')"
 
 case ":$PATH:" in
-  *":$bin_dir:"*) ;;
-  *) echo "install: add $bin_dir to PATH, e.g.  echo 'export PATH=\"$bin_dir:\$PATH\"' >> ~/.zshrc" ;;
+  *":$bin_dir:"*)
+    echo "install: next, run  cn-setup"
+    echo "install: (a shell that was open before the install completes cn-* only after  rehash  in zsh or  hash -r  in bash)"
+    ;;
+  *)
+    case "$(basename "${SHELL:-bash}")" in zsh) rc="~/.zshrc" ;; *) rc="~/.bashrc" ;; esac
+    echo "install: $bin_dir is not in PATH. Add it:  echo 'export PATH=\"$bin_dir:\$PATH\"' >> $rc"
+    echo "install: then open a new terminal and run  cn-setup"
+    ;;
 esac
-echo "install: next, run  cn-setup"
