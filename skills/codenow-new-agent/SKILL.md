@@ -63,7 +63,12 @@ user goes on in a chat of that new window.
 
 ## 5. Continue with the start skill
 
-Do not ask the user to open a new session. Read `<agent name>/.claude/skills/start/SKILL.md` (Codex and Copilot:
+In VS Code Copilot Chat, stop here: only a chat in the new window of the clone has the repository's `AGENTS.md` and
+skills. Tell the user: "Switch to the new window <agent name>, open Copilot Chat there (Interactive mode) and run
+`/start`". Do not run the start skill in this window.
+
+In a terminal assistant (Claude Code, Codex, Copilot CLI), do not ask the user to open a new session. Read
+`<agent name>/.claude/skills/start/SKILL.md` (Codex and Copilot:
 `<agent name>/.agents/skills/start/SKILL.md`) and do its steps now, with the cloned repository as the working folder
 for every command. Its step 1 is already done: you know the swarm and the agent.
 
