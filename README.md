@@ -38,7 +38,7 @@ Exit codes of `cn-wait` and `cn-call`:
 | Code | Means |
 |---|---|
 | 0 | Done: the build finished, the deployment is `HEALTHY`, the call worked. |
-| 1 | The build or deployment failed. Also any status that `cn-wait` does not know as running: it prints the status. Known running statuses: builds `QUEUED`, `PENDING`, `CREATED`, `SCHEDULED`, `WAITING`, `STARTED`, `STARTING`, `RUNNING`, `IN_PROGRESS`, `BUILDING` and `BUILD_` plus `STARTED`, `RUNNING`, `QUEUED` or `PENDING`; deployments `PENDING`, `QUEUED`, `CREATED`, `PROGRESSING`, `DEPLOYING`, `IN_PROGRESS`, `RUNNING`, `SYNCING`, `OUT_OF_SYNC`, `MISSING`, `STARTING`. No status yet counts as running. |
+| 1 | The build or deployment failed. Also any status that `cn-wait` does not know as running: it prints the status. Known running statuses (`INITIALISING`, `BUILDING`, `SUCCESSFUL`, `FAILED`, `HEALTHY`, `UPDATING` and `FAILED_TO_UPDATE` are seen on a live tenant): builds `INITIALISING`, `INITIALIZING`, `QUEUED`, `PENDING`, `CREATED`, `SCHEDULED`, `WAITING`, `STARTED`, `STARTING`, `RUNNING`, `IN_PROGRESS`, `BUILDING` and `BUILD_` plus `STARTED`, `RUNNING`, `QUEUED` or `PENDING`; deployments `UPDATING`, `PENDING`, `QUEUED`, `CREATED`, `PROGRESSING`, `DEPLOYING`, `IN_PROGRESS`, `RUNNING`, `SYNCING`, `OUT_OF_SYNC`, `MISSING`, `STARTING`. No status yet counts as running. |
 | 2 | Error: wrong arguments, no setup, the server cannot be reached, refuses the key, sends a redirect or an answer that is not JSON, or the tool answers with an error. One line on stderr, never the key. |
 | 3 | Still running after `--max` seconds: run the same command again. |
 

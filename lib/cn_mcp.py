@@ -48,6 +48,9 @@ class OutOfTime(CnError):
     pass
 
 
+_USED_KEYS = set()  # every key this process used, from the environment or the credentials file (scrub hides them)
+
+
 def home():
     return pathlib.Path(os.environ.get("CODENOW_HOME") or pathlib.Path.home() / ".codenow")
 
@@ -98,6 +101,7 @@ def settings():
                     or read_settings(home() / "credentials").get("CODENOW_API_KEY", ""))
     if not key:
         raise CnError("no CodeNOW API key: run  CODENOW_API_KEY=<key> cn-setup  (CodeNOW profile > API keys)")
+    _USED_KEYS.add(key)
     return url, key
 
 
@@ -395,8 +399,11 @@ def run(argv):
 
 def scrub(text):
     """Error lines never show the API key."""
-    key = (os.environ.get("CODENOW_API_KEY") or "").strip()
-    if key:
+    keys = set(_USED_KEYS)
+    env_key = (os.environ.get("CODENOW_API_KEY") or "").strip()
+    if env_key:
+        keys.add(env_key)
+    for key in sorted(keys, key=len, reverse=True):
         text = text.replace(key, "***")
     return " ".join(text.split())
 
