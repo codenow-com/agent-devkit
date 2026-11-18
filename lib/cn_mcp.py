@@ -28,13 +28,14 @@ POLL_SECONDS = 10
 DEFAULT_MAX_SECONDS = 50  # stays under the time limit that assistants put on one tool call
 REQUEST_SECONDS = 30
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-# Status sets. The MCP tool descriptions do not list the values, so the rule is conservative: done ends with 0,
+# Status sets. Seen on a live tenant: builds INITIALISING, BUILDING, SUCCESSFUL, FAILED; deployments
+# HEALTHY, UPDATING, FAILED_TO_UPDATE. Other values are a guess, so the rule is conservative: done ends with 0,
 # a known running status goes on, and any other status ends with 1 and is printed. No status yet counts as running.
 BUILD_DONE = {"BUILD_FINISHED", "SUCCESSFUL", "SUCCEEDED", "SUCCESS", "FINISHED", "COMPLETED"}
-BUILD_RUNNING = {"QUEUED", "PENDING", "CREATED", "SCHEDULED", "WAITING", "STARTED", "STARTING", "RUNNING",
+BUILD_RUNNING = {"INITIALISING", "INITIALIZING", "QUEUED", "PENDING", "CREATED", "SCHEDULED", "WAITING", "STARTED", "STARTING", "RUNNING",
                  "IN_PROGRESS", "BUILDING", "BUILD_STARTED", "BUILD_RUNNING", "BUILD_QUEUED", "BUILD_PENDING"}
 DEPLOY_DONE = {"HEALTHY"}
-DEPLOY_RUNNING = {"PENDING", "QUEUED", "CREATED", "PROGRESSING", "DEPLOYING", "IN_PROGRESS", "RUNNING", "SYNCING",
+DEPLOY_RUNNING = {"UPDATING", "PENDING", "QUEUED", "CREATED", "PROGRESSING", "DEPLOYING", "IN_PROGRESS", "RUNNING", "SYNCING",
                   "OUT_OF_SYNC", "MISSING", "STARTING"}
 EXIT_DONE, EXIT_FAILED, EXIT_ERROR, EXIT_RUNNING = 0, 1, 2, 3
 
