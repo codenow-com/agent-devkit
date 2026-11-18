@@ -30,8 +30,17 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest CodeNOW Agent SDK template and clones the repository. |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
-| `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s, under the time limit that assistants put on a command; exit code 3 means "still running, run it again". Needs the API key (below). |
-| `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. Needs the API key (below). |
+| `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
+| `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
+
+Exit codes of `cn-wait` and `cn-call`:
+
+| Code | Means |
+|---|---|
+| 0 | Done: the build finished, the deployment is `HEALTHY`, the call worked. |
+| 1 | The build or deployment failed. Also any status that `cn-wait` does not know as running: it prints the status. Known running statuses: builds `QUEUED`, `PENDING`, `CREATED`, `SCHEDULED`, `WAITING`, `STARTED`, `STARTING`, `RUNNING`, `IN_PROGRESS`, `BUILDING` and `BUILD_` plus `STARTED`, `RUNNING`, `QUEUED` or `PENDING`; deployments `PENDING`, `QUEUED`, `CREATED`, `PROGRESSING`, `DEPLOYING`, `IN_PROGRESS`, `RUNNING`, `SYNCING`, `OUT_OF_SYNC`, `MISSING`, `STARTING`. No status yet counts as running. |
+| 2 | Error: wrong arguments, no setup, the server cannot be reached, refuses the key, sends a redirect or an answer that is not JSON, or the tool answers with an error. One line on stderr, never the key. |
+| 3 | Still running after `--max` seconds: run the same command again. |
 
 ## The flow
 
@@ -46,7 +55,9 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 
 `~/.codenow/config` keeps the MCP URL and the kubeconfig path (mode 600), never a token. `CODENOW_API_KEY=<key> cn-setup`
 also saves the key in `~/.codenow/credentials` (mode 600) for `cn-wait` and `cn-call`; they read `CODENOW_API_KEY`
-first when it is set.
+first when it is set. `cn-setup` first checks a new key against the server; a key that does not work does not replace
+the stored one. `cn-setup --forget-key` removes the stored key. The MCP URL must use `https://` (`http://` only for
+`localhost`), and `cn-call` and `cn-wait` do not follow redirects, so the key goes to that server only.
 
 - Claude Code logs in to CodeNOW with OAuth on first use.
 - Codex and Copilot CLI cannot use the CodeNOW login, so they send a CodeNOW API key (CodeNOW UI: your profile → API
@@ -54,7 +65,9 @@ first when it is set.
   - Codex reads it from the `CODENOW_API_KEY` environment variable when it starts; `~/.codex/config.toml` keeps no
     key. Export the variable in your shell, for example from the macOS keychain:
     `export CODENOW_API_KEY="$(security find-generic-password -s codenow-api-key -w)"`.
-  - Copilot CLI keeps the key in `~/.copilot/mcp-config.json`: run `CODENOW_API_KEY=<key> cn-setup` once.
+  - Copilot CLI keeps the key in `~/.copilot/mcp-config.json`: run `CODENOW_API_KEY=<key> cn-setup` once. Copilot CLI
+    takes the header only on its command line (`copilot mcp add --header`), so while `cn-setup` adds the server, other
+    users of the computer can see the key in the process list for a moment.
 - VS Code Copilot Chat: `cn-setup` adds the server to the user-level `mcp.json` of VS Code (and VS Code Insiders). The
   file keeps no key: on the first start of the server (Command Palette: MCP: List Servers, the server, Start Server)
   VS Code asks for the API key and keeps it in its own secret storage. Other servers in the file stay; a file with

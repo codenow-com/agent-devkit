@@ -3,6 +3,7 @@
 #
 #   cn-setup           set up what is missing; asks once for the MCP URL of your tenant and the kubeconfig
 #   cn-setup --check   only report (the same as cn-doctor)
+#   cn-setup --forget-key   remove the API key that cn-call and cn-wait use (~/.codenow/credentials)
 #
 # It checks the tools, adds the CodeNOW MCP server to Claude Code, Codex and GitHub Copilot CLI, installs the
 # devkit skills into them, and checks the kubeconfig. Settings: ~/.codenow/config. It never stores a token.
@@ -13,10 +14,24 @@ while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
 CN_CMD=cn-setup
 check=0
-[ "${1:-}" = "--check" ] && check=1 && CN_CMD=cn-doctor
+case "${1:-}" in
+  "") ;;
+  --check) check=1; CN_CMD=cn-doctor ;;
+  --forget-key) ;;
+  *) die "unknown option $1 (use --check or --forget-key)" ;;
+esac
 load_config
+credentials="$CODENOW_HOME/credentials"
+if [ "${1:-}" = "--forget-key" ]; then
+  if [ -f "$credentials" ]; then rm -f "$credentials"; say "removed the API key ($credentials)"
+  else say "no stored API key ($credentials)"; fi
+  say "the key can still be in CODENOW_API_KEY, ~/.copilot/mcp-config.json and the secret storage of VS Code"
+  exit 0
+fi
 problems=0
 note() { say "$*"; problems=$((problems + 1)); }
+# private <file>: true when only the owner can read and write it (or it does not exist)
+private() { [ ! -f "$1" ] || [ "$(ls -l "$1" | cut -c5-10)" = "------" ]; }
 
 # 1. Tools
 for tool in git curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
@@ -41,8 +56,11 @@ for cmd in "$DEVKIT_DIR"/bin/cn-*; do
     note "$(basename "$cmd") in PATH is $found, not this devkit's: remove it or put ~/.local/bin first in PATH"
   fi
 done
-[ ! -f "$CODENOW_CONFIG" ] || [ "$(ls -l "$CODENOW_CONFIG" | cut -c5-10)" = "------" ] \
-  || note "$CODENOW_CONFIG is readable by other users: chmod 600 $CODENOW_CONFIG"
+for f in "$CODENOW_CONFIG" "$credentials"; do
+  if private "$f"; then :
+  elif [ "$check" = 1 ]; then note "$f is readable by other users: chmod 600 $f"
+  else chmod 600 "$f"; say "$f was readable by other users: set mode 600"; fi
+done
 if have docker && docker compose version >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then say "Docker with Compose: ok"
   else note "Docker is installed but this user cannot use it (not running, or not in the docker group: log in again)"; fi
@@ -74,6 +92,30 @@ have claude || have codex || have copilot || note "no coding assistant found: in
 [ -n "${CODENOW_MCP_URL:-}" ] || note "no CodeNOW MCP URL set: run cn-setup"
 name="${CODENOW_MCP_NAME:-codenow}"
 
+# 2b. The API key for cn-call and cn-wait (and Copilot CLI), which assistants run to wait for builds and deployments.
+# It lives in its own file (mode 600): the config file never holds a token. Optional for Claude Code, which uses the
+# CodeNOW login. A new key is checked against the server before it replaces the stored one.
+# valid_key <key>: printable ASCII without spaces (LC_ALL=C makes the range byte-wise).
+valid_key() ( LC_ALL=C; case "$1" in ""|*[!!-~]*) exit 1 ;; esac )
+key_ok=0
+if [ -n "${CODENOW_API_KEY:-}" ]; then
+  key="$CODENOW_API_KEY"
+  key="${key#"${key%%[![:space:]]*}"}"; key="${key%"${key##*[![:space:]]}"}"  # strip spaces and CR/LF
+  valid_key "$key" || die "CODENOW_API_KEY has spaces or characters that are not printable ASCII: copy it again"
+  export CODENOW_API_KEY="$key"; unset key
+  if [ "$check" = 1 ]; then :
+  elif [ -z "${CODENOW_MCP_URL:-}" ]; then note "CODENOW_MCP_URL is not set, so the API key was not checked or saved"
+  elif python3 -I "$DEVKIT_DIR/lib/cn_mcp.py" save-key; then key_ok=1
+  else note "the API key was not saved"; fi
+fi
+if [ "$key_ok" = 1 ]; then :
+elif [ -f "$credentials" ] || [ -n "${CODENOW_API_KEY:-}" ]; then
+  if run_limited 30 "$DEVKIT_DIR/bin/cn-call" agent_swarms_list; then say "cn-call and cn-wait: CodeNOW API key ok"; key_ok=1
+  else note "cn-call and cn-wait: the CodeNOW API key does not work; run  CODENOW_API_KEY=<key> cn-setup"; fi
+else
+  say "cn-call and cn-wait: no API key (optional; for Copilot and Codex run  CODENOW_API_KEY=<key> cn-setup)"
+fi
+
 # 3. CodeNOW MCP server in each assistant (user scope, so every repository sees it). Presence is read from the
 # assistants' own config files: their "mcp list" commands connect to the server and can hang without a login.
 has_url() { [ -f "$1" ] && grep -qF "$CODENOW_MCP_URL" "$1"; }
@@ -101,7 +143,9 @@ if [ -n "${CODENOW_MCP_URL:-}" ]; then
   if have copilot; then
     if has_url "$HOME/.copilot/mcp-config.json"; then say "Copilot CLI: CodeNOW MCP ok"
     elif [ "$check" = 1 ]; then note "Copilot CLI: CodeNOW MCP missing"
-    elif [ -n "${CODENOW_API_KEY:-}" ]; then
+    elif [ -n "${CODENOW_API_KEY:-}" ] && [ "$key_ok" = 1 ]; then
+      # The key is in the argv of copilot for a moment (other users of this computer can see it in ps): Copilot CLI
+      # takes a header only as --header, not from a file or a variable. Copilot then keeps it in its config file.
       if copilot mcp add --transport http --header "X-Codenow-Api-Key: $CODENOW_API_KEY" "$name" "$CODENOW_MCP_URL" >/dev/null 2>&1; then
         say "Copilot CLI: added MCP server $name (Copilot keeps the API key in ~/.copilot/mcp-config.json)"
       else note "Copilot CLI: adding the MCP server failed"; fi
@@ -116,20 +160,6 @@ if [ -n "${CODENOW_MCP_URL:-}" ]; then
   vscode_out="$(python3 -I "$DEVKIT_DIR/lib/vscode_mcp.py" "$mode" "$name" "$CODENOW_MCP_URL" 2>&1)" || vscode_rc=$?
   while IFS= read -r line; do [ -n "$line" ] && echo "${CN_CMD:-cn}: $line"; done <<< "$vscode_out"
   [ "${vscode_rc:-0}" = 0 ] || problems=$((problems + 1))
-fi
-
-# 3b. The API key for cn-call and cn-wait, which assistants run to wait for builds and deployments. It lives in its
-# own file (mode 600): the config file never holds a token. Optional for Claude Code, which uses the CodeNOW login.
-credentials="$CODENOW_HOME/credentials"
-if [ "$check" != 1 ] && [ -n "${CODENOW_API_KEY:-}" ]; then
-  (umask 077; printf 'CODENOW_API_KEY=%q\n' "$CODENOW_API_KEY" > "$credentials")
-  say "saved the API key for cn-call and cn-wait in $credentials (mode 600)"
-fi
-if [ -f "$credentials" ] || [ -n "${CODENOW_API_KEY:-}" ]; then
-  if run_limited 30 "$DEVKIT_DIR/bin/cn-call" agent_swarms_list >/dev/null 2>&1; then say "cn-call and cn-wait: CodeNOW API key ok"
-  else note "cn-call and cn-wait: the CodeNOW API key does not work; run  CODENOW_API_KEY=<key> cn-setup"; fi
-else
-  say "cn-call and cn-wait: no API key (optional; for Copilot and Codex run  CODENOW_API_KEY=<key> cn-setup)"
 fi
 
 # 4. Devkit skills for each assistant (copied, refreshed by cn-update)
