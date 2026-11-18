@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # cn-wait: wait for a CodeNOW build or deployment and print each change; at most 50 s per run (--max <s>).
 #
-#   cn-wait build <swarm> <agent> [build id]     exit 0 done, 1 failed, 3 still running: run it again
+#   cn-wait build <swarm> <agent> [build id]
 #   cn-wait deploy <swarm> <environment>
+#
+# Exit codes: 0 done, 1 failed (or a status that is not known as running), 2 error, 3 still running: run it again.
 #
 # The MCP URL comes from ~/.codenow/config, the API key from CODENOW_API_KEY or ~/.codenow/credentials (cn-setup).
 src="${BASH_SOURCE[0]}"
