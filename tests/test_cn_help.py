@@ -103,6 +103,13 @@ class HelpTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "sandbox.sh logs --help\n")
 
+    def test_doctor_refuses_forget_key(self):
+        result = self.run_cn("cn-doctor", "--forget-key")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cn-setup --forget-key", result.stderr)
+        self.assertTrue(result.stderr.rstrip().endswith("Try 'cn-doctor --help'."))
+        self.assert_no_effect("cn-doctor")
+
     def test_wait_keeps_the_max_option(self):
         result = self.run_cn("cn-wait", "build", "--max", "5", "--bogus")
         self.assertEqual(result.returncode, 2)

@@ -4,4 +4,8 @@ src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
 cn_help_any cn-doctor "$@"
+# A report changes nothing: the key removal belongs to cn-setup only.
+for arg in "$@"; do
+  case "$arg" in --forget-key) cn_usage_error cn-doctor "--forget-key is not a report; use cn-setup --forget-key" ;; esac
+done
 exec bash "$(cd "$(dirname "$src")" && pwd)/cn-setup" --check "$@"
