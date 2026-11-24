@@ -4,6 +4,8 @@
 #   cn-setup           set up what is missing; asks once for the MCP URL of your tenant and the kubeconfig
 #   cn-setup --check   only report (the same as cn-doctor)
 #   cn-setup --forget-key   remove the API key that cn-call and cn-wait use (~/.codenow/credentials)
+#   cn-setup --skip-gateway   leave out the optional step "Developer identity (agent gateway)"
+#   cn-setup --only-gateway   run only that step (with --check: only its report)
 #
 # It checks the tools, adds the CodeNOW MCP server to Claude Code, Codex and GitHub Copilot CLI, installs the
 # devkit skills into them, and checks the kubeconfig. Settings: ~/.codenow/config. It never stores a token.
@@ -12,17 +14,24 @@ set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+. "$DEVKIT_DIR/lib/sandbox_token.sh"
+. "$DEVKIT_DIR/lib/gateway_setup.sh"
 CN_CMD=cn-setup
 check=0
-case "${1:-}" in
-  "") ;;
-  --check) check=1; CN_CMD=cn-doctor ;;
-  --forget-key) ;;
-  *) die "unknown option $1 (use --check or --forget-key)" ;;
-esac
+forget=0
+gateway=ask
+for arg in "$@"; do
+  case "$arg" in
+    --check) check=1; CN_CMD=cn-doctor ;;
+    --forget-key) forget=1 ;;
+    --skip-gateway) gateway=skip ;;
+    --only-gateway) gateway=only ;;
+    *) die "unknown option $arg (use --check, --forget-key, --skip-gateway or --only-gateway)" ;;
+  esac
+done
 load_config
 credentials="$CODENOW_HOME/credentials"
-if [ "${1:-}" = "--forget-key" ]; then
+if [ "$forget" = 1 ]; then
   if [ -f "$credentials" ]; then rm -f "$credentials"; say "removed the API key ($credentials)"
   else say "no stored API key ($credentials)"; fi
   say "the key can still be in CODENOW_API_KEY, ~/.copilot/mcp-config.json and the secret storage of VS Code"
@@ -32,6 +41,14 @@ problems=0
 note() { say "$*"; problems=$((problems + 1)); }
 # private <file>: true when only the owner can read and write it (or it does not exist)
 private() { [ ! -f "$1" ] || [ "$(ls -l "$1" | cut -c5-10)" = "------" ]; }
+
+if [ "$gateway" = only ]; then
+  for tool in curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
+  if [ "$check" = 1 ]; then gateway_report; else gateway_step; fi
+  echo
+  [ "$problems" = 0 ] && say "developer identity: all good" || { say "$problems problem(s)"; exit 1; }
+  exit 0
+fi
 
 # 1. Tools
 for tool in git curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
@@ -81,9 +98,6 @@ if have openspec; then
 elif have npm; then note "openspec is missing (every agent change goes through OpenSpec):  $(install_hint openspec)"
 else note "openspec is missing and needs Node.js:  $(install_hint node), then  $(install_hint openspec)"; fi
 have conda && say "found conda" || say "not found: conda (optional; a .venv works too)"
-# oidc-agent: a local agent under the developer's own identity (cn-sandbox token); optional.
-. "$DEVKIT_DIR/lib/sandbox_token.sh"
-oidc_check || problems=$((problems + 1))
 for tool in claude codex copilot; do
   if have "$tool"; then say "found $tool"; else say "not found: $tool (optional):  $(install_hint "$tool")"; fi
 done
@@ -228,6 +242,17 @@ for f in "$HOME/.pip/pip.conf" "$HOME/.config/pip/pip.conf" "$HOME/Library/Appli
     *) note "pip.conf with credentials is readable by other users: chmod 600 \"$f\"" ;;
   esac
 done
+
+# 7. Developer identity (agent gateway): optional; cn-doctor reports it.
+if [ "$check" = 1 ]; then
+  [ "$gateway" = skip ] || gateway_report
+elif [ "$gateway" != skip ]; then
+  if [ -n "${CODENOW_AGW_URL:-}" ] || ask_yes "Set up your developer identity for the agent gateway (oidc-agent, optional)?"; then
+    gateway_step
+  else
+    say "developer identity (agent gateway): skipped; later: cn-setup --only-gateway"
+  fi
+fi
 
 echo
 if [ "$check" = 1 ]; then
