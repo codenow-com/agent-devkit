@@ -69,7 +69,8 @@ class AsMeTest(unittest.TestCase):
         self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_WORKFORCE_URL={OBSERVER}\n"
                       "CODENOW_MCP_URL=https://mcp-server-demotenant.example.com/mcp\n")
         self.env = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
-                    "FAKE_STATE": str(self.state), "REAL_PYTHON": real, "CN_SANDBOX_TOKEN_INTERVAL": "30"}
+                    "FAKE_STATE": str(self.state), "REAL_PYTHON": real, "CN_SANDBOX_TOKEN_INTERVAL": "30",
+                    "CN_SANDBOX_HUB": "off"}
         self.repo = self.tmp / "agent"
         (self.repo / "sandbox").mkdir(parents=True)
         write_exe(self.repo / "sandbox" / "sandbox.sh", SANDBOX_STUB)

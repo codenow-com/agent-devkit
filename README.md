@@ -28,7 +28,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
-| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`. `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
+| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
@@ -166,6 +166,37 @@ Open the console on `http://localhost:<port>/`, as `cn-sandbox up` and `status` 
 | `CN_SANDBOX_TOKEN_GRACE` | `300` | seconds a sandbox counts as using the refresh after its `up`, even without a running container |
 
 The token is a secret: it is never printed, and the sandbox mounts only its own copy of it.
+
+## All your sandboxes on one page
+
+`cn-sandbox hub` starts a small local page on `http://localhost:8079/` (bound to 127.0.0.1 only) and prints its URL;
+`cn-sandbox up` starts it too when it is not running and prints `sandboxes: http://localhost:8079/` under the console
+line. The page lists every agent sandbox on this computer (the Docker compose projects named `sandbox-*`) and refreshes
+every 5 s. Per sandbox it shows:
+
+- the agent's name, its repository folder and whether the sandbox runs (a stopped one is grey, with the
+  `cn-sandbox up` hint);
+- the identity: `as you (developer)` or `deployment token`, and the agent's last Workforce onboarding line;
+- the link to the agent's console (`http://localhost:<port>/`, in a new tab);
+- a diagram of how this sandbox is connected: browser, edge, agent, runstore and valkey on the inner network (no
+  internet), and egress to each allowlisted host on the outer network, plus the token the agent uses.
+
+The hub only reads: Docker (`docker ps`, `docker inspect`, the agent's log), `sandbox/.run/allow` and
+`sandbox/.run/port` of the repository, and four non-secret keys of `.env` (`CN_IDENTITY_PROVIDER`,
+`CN_IDENTITY_DEVELOPER_CLIENTS`, `WORKFORCE_URL`, `WORKFORCE_MODE`). It masks anything that looks like a token.
+
+| Command | Does |
+|---|---|
+| `cn-sandbox hub` | Starts the hub in the background (once) and prints its URL. |
+| `cn-sandbox hub --status` | Says whether it runs. |
+| `cn-sandbox hub --stop` | Stops it. |
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CN_SANDBOX_HUB_PORT` | `8079` | the hub's port; when another program has it, the hub says so: choose another |
+| `CN_SANDBOX_HUB` | `on` | `off`: `cn-sandbox up` does not start the hub |
+
+The pid and log are in `~/.codenow/sandbox-hub/`.
 
 ## Settings and secrets
 

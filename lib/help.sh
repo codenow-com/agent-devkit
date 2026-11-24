@@ -9,7 +9,7 @@ cn_usage_line() {
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot]" ;;
-    cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me [args]" ;;
+    cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me|hub [args]" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-wait) echo "usage: cn-wait build|deploy <swarm> <agent|environment> [build id] [--max <s>]" ;;
@@ -193,6 +193,7 @@ SYNOPSIS
     cn-sandbox as-me off | status
     cn-sandbox run <pipeline> [subject] [json]
     cn-sandbox token [--watch | --stop]
+    cn-sandbox hub [--stop | --status]
     cn-sandbox <other sandbox.sh command> [args]
     cn-sandbox -h | --help
 
@@ -211,7 +212,9 @@ OPTIONS
              background, unless it already runs for another sandbox: one
              refresh serves every sandbox of yours. Then it prints the
              console URL on localhost: the login returns to localhost, so a
-             login started on 127.0.0.1 fails.
+             login started on 127.0.0.1 fails. It also starts the sandbox
+             hub when it is not running and prints its URL
+             (sandboxes: http://localhost:8079/).
     up --as-me
              Run the agent as yourself: check that requirements.txt pins
              codenow-agent-sdk 2.24.0 or newer (an older pin: ask to raise
@@ -243,6 +246,17 @@ OPTIONS
     token --stop
              Stop the background refresh that `up' started, for every
              sandbox, and empty its list of sandboxes.
+    hub      Start the sandbox hub in the background (once) and print its
+             URL: one page on http://localhost:8079/ (127.0.0.1 only) with
+             every agent sandbox on this computer, its state, identity,
+             Workforce onboarding, egress allowlist and a diagram of how it
+             is connected, with the link to each agent's console. It
+             reads Docker, changes nothing and never shows a token. Works
+             in any folder.
+    hub --stop
+             Stop the hub.
+    hub --status
+             Print whether the hub runs (exit 0) or not (exit 1).
     -h, --help
              Print this help and exit (only as the first argument).
 
@@ -255,6 +269,8 @@ ENVIRONMENT
     CN_SANDBOX_TOKEN_INTERVAL  seconds between refreshes (default 45)
     CN_SANDBOX_TOKEN_GRACE     seconds after `up' before a sandbox without a
                                running container leaves the list (300)
+    CN_SANDBOX_HUB_PORT        the hub's port on 127.0.0.1 (default 8079)
+    CN_SANDBOX_HUB             off: `up' does not start the hub
     CODENOW_HOME               the settings folder (default ~/.codenow)
 
 FILES
@@ -269,6 +285,8 @@ FILES
     ~/.codenow/sandbox-token/users/
         One file per agent repository that uses the refresh; an entry
         whose sandbox has no running container is removed.
+    ~/.codenow/sandbox-hub/hub.pid, hub.log
+        The pid and log of the sandbox hub.
 
 SEVERAL AGENTS AT ONCE
     Each agent repository runs its own sandbox (its own compose project;
@@ -281,8 +299,10 @@ EXIT STATUS
     0    token written, or refresh stopped
     1    not in a git repository, no sandbox/sandbox.sh, or no token;
          up --as-me: no client, an old SDK pin, or a line in .env that
-         conflicts with the block
-    2    wrong arguments (as-me without off or status)
+         conflicts with the block; hub: it did not start (port taken);
+         hub --status: not running
+    2    wrong arguments (as-me without off or status, hub with another
+         option)
     token --watch runs until it is stopped.
 
 EXAMPLES
@@ -292,6 +312,7 @@ EXAMPLES
     cn-sandbox as-me off
     cn-sandbox run <pipeline>
     cn-sandbox token --watch
+    cn-sandbox hub
     cn-sandbox down
 
 SEE ALSO

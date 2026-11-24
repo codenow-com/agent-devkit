@@ -44,7 +44,7 @@ class TokenTest(unittest.TestCase):
         write_exe(self.bin / "oidc-token", FAKE_TOKEN)
         write_exe(self.bin / "oidc-agent", FAKE_AGENT)
         self.env = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
-                    "FAKE_STATE": str(self.state), "CN_SANDBOX_TOKEN_INTERVAL": "1"}
+                    "FAKE_STATE": str(self.state), "CN_SANDBOX_TOKEN_INTERVAL": "1", "CN_SANDBOX_HUB": "off"}
         self.token = self.home / ".codenow" / "sandbox-token" / "token"
 
     def tearDown(self):
