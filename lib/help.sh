@@ -156,7 +156,15 @@ DESCRIPTION
     terminal: every step and /start go on in this session; `code' is
         never run.
     vscode: the whole flow moves to VS Code at once. With CN_WORKSPACE=
-        vscode this command starts no assistant: it runs `code .' and
+        vscode this command starts no assistant here. It writes the
+        one-shot task "CodeNOW: new agent" (runOn folderOpen) into
+        .vscode/tasks.json and runs `code .'; in the window that opens the
+        task starts the assistant in the integrated terminal and first
+        takes itself out of tasks.json again. VS Code may ask once to
+        allow automatic tasks (Allow and Run); your VS Code settings are
+        not changed. Another tasks.json is merged; one with comments is
+        not touched. No automatic start (CN_VSCODE_AUTOSTART=off, a
+        tasks.json with comments, no assistant or python3 found): it only
         tells you to type /codenow-new-agent in the chat of the window
         that opened. Without the `code' command it prints how to install
         it and exits 1.
@@ -176,10 +184,16 @@ ENVIRONMENT
            found
     TERM_PROGRAM, VSCODE_PID, VSCODE_IPC_HOOK_CLI
            set: you are inside VS Code
+    CN_VSCODE_AUTOSTART
+           off: with CN_WORKSPACE=vscode, write no task; only print what
+           to type in the VS Code chat
 
 FILES
     ~/.claude/skills, ~/.codex/skills, ~/.copilot/skills
         The codenow-new-agent skill (installed by cn-setup).
+    .vscode/tasks.json
+        The one-shot task "CodeNOW: new agent" (detail "cn-devkit:
+        one-shot"), with CN_WORKSPACE=vscode until it has run.
     ~/.codenow/config
         CN_WORKSPACE (terminal or vscode), CODENOW_AGW_CLIENT_ID and
         CODENOW_WORKFORCE_URL (the developer identity for /start).

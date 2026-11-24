@@ -49,11 +49,18 @@ Exit codes of `cn-wait` and `cn-call`:
 2. `cn-new-agent` first settles where you work on the agent, in this terminal or in VS Code (asked once, stored as
    `CN_WORKSPACE` in `~/.codenow/config`; change it with `cn-setup --workspace terminal|vscode`).
    - Terminal: all steps go on in the same session; `code` is never run, only printed as a hint at the end.
-   - VS Code: the switch happens at once, before any question about the agent. `cn-new-agent` (or the skill in a
-     terminal assistant) runs `code .` in the current folder and stops; in the window that opened, open the chat
-     (Claude Code extension, or Copilot Chat in Interactive mode) and type `/codenow-new-agent` (Copilot Chat: ask it
-     to use the codenow-new-agent skill). Without the `code` command it tells you to install it (Command Palette:
-     "Shell Command: Install 'code' command in PATH"). `cn-new-agent --here` works in the terminal this once.
+   - VS Code: the switch happens at once, before any question about the agent. `cn-new-agent` writes a one-shot
+     task "CodeNOW: new agent" (runs when the folder opens) into `.vscode/tasks.json`, runs `code .` in the current
+     folder and stops. In the window that opens, the task starts your assistant (Claude Code CLI, Codex or Copilot
+     CLI) in the integrated terminal, takes itself out of `tasks.json` (and deletes the file and `.vscode` when it
+     created them) and the flow goes on there. The first time, VS Code asks once to allow automatic tasks: choose
+     "Allow and Run". The devkit never changes your VS Code settings. If nothing starts, run the task from
+     Terminal → Run Task, or type `/codenow-new-agent` in the chat. An existing `tasks.json` is merged; one with
+     comments is not touched, and then, as with `CN_VSCODE_AUTOSTART=off`, the skill in a terminal assistant, or
+     `--with copilot` without Copilot CLI, you open the chat (Claude Code extension, or Copilot Chat in Interactive
+     mode) and type `/codenow-new-agent` (Copilot Chat: ask it to use the codenow-new-agent skill). Without the
+     `code` command it tells you to install it (Command Palette: "Shell Command: Install 'code' command in PATH").
+     `cn-new-agent --here` works in the terminal this once.
    - Inside VS Code (`TERM_PROGRAM=vscode`, `VSCODE_PID` or `VSCODE_IPC_HOOK_CLI` set, or Copilot Chat) the skill asks
      nothing about the workspace and runs every step there.
 
@@ -251,8 +258,9 @@ the stored one. `cn-setup --forget-key` removes the stored key. The MCP URL must
   comments is not changed, and `cn-setup` prints the lines to add by hand.
   - Use the chat in the Interactive mode, not Autopilot: in Autopilot the assistant cannot ask you to confirm a change
     in CodeNOW, so it stops at the first one.
-  - `cn-new-agent` cannot start the chat in VS Code: with `CN_WORKSPACE=vscode` it opens the folder in VS Code, and
-    you write in the chat: "Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into this
+  - `cn-new-agent` cannot start the chat in VS Code: with `CN_WORKSPACE=vscode` it starts Copilot CLI in the
+    integrated terminal when it is installed (`--with copilot`); otherwise it opens the folder in VS Code, and you
+    write in the chat: "Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into this
     folder."
 
 ## Uninstall

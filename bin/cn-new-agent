@@ -6,8 +6,10 @@
 #   cn-new-agent --with codex        pick one
 #   cn-new-agent --here              work in this terminal this once, also when CN_WORKSPACE=vscode
 #
-# With CN_WORKSPACE=vscode in ~/.codenow/config (and not inside VS Code already) it starts no assistant: it opens this
-# folder in VS Code and tells you to type /codenow-new-agent in the chat there.
+# With CN_WORKSPACE=vscode in ~/.codenow/config (and not inside VS Code already) it starts no assistant here: it writes a
+# one-shot folder-open task into .vscode/tasks.json and opens this folder in VS Code, where the task starts the assistant
+# in the integrated terminal. CN_VSCODE_AUTOSTART=off, a tasks.json with comments or no assistant found: it only tells
+# you to type /codenow-new-agent in the chat there.
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
@@ -26,6 +28,24 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
+folder="$(pwd)"
+prompt="Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into $folder."
+slash="/codenow-new-agent"
+if [ "$here" = 1 ]; then
+  export CN_NEW_AGENT_HERE=1
+  prompt="$prompt Work in this terminal (--here): do not switch to VS Code."
+  slash="$slash --here"
+fi
+
+# pick_assistant: sets $with to the --with value or the first assistant found; returns 1 when none is usable.
+pick_assistant() {
+  if [ -z "$with" ]; then
+    for candidate in claude codex copilot; do have "$candidate" && { with="$candidate"; break; }; done
+  fi
+  [ -n "$with" ] && have "$with"
+}
+
 # CN_WORKSPACE=vscode: switch to VS Code now, before any question. Inside VS Code (its terminal) the flow stays here.
 CN_WORKSPACE=""
 # shellcheck disable=SC1090
@@ -36,26 +56,36 @@ if [ "${TERM_PROGRAM:-}" = vscode ] || [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCOD
 fi
 if [ "$here" = 0 ] && [ "$inside_vscode" = 0 ] && [ "${CN_WORKSPACE:-}" = vscode ]; then
   have code || die "the \`code' command is not on your PATH. In VS Code, open the Command Palette and run \"Shell Command: Install 'code' command in PATH\", then run cn-new-agent again (cn-new-agent --here works in this terminal)."
-  say "CN_WORKSPACE=vscode: opening $(pwd) in VS Code (cn-new-agent --here works in this terminal once)"
+  autostart=0
+  if [ "${CN_VSCODE_AUTOSTART:-on}" != off ] && have python3 && pick_assistant; then
+    case "$with" in
+      claude) set -- claude "$slash" ;;
+      codex) set -- codex "$prompt" ;;
+      copilot) set -- copilot -i "$prompt" ;;
+      *) set -- ;;
+    esac
+    if [ "$#" -gt 0 ] && python3 -I "$lib/vscode_task.py" add "$folder" "$@"; then
+      autostart=1
+    elif [ "$#" -gt 0 ]; then
+      say "$folder/.vscode/tasks.json is not plain JSON (comments?): left unchanged, no automatic start"
+    fi
+  fi
+  say "CN_WORKSPACE=vscode: opening $folder in VS Code (cn-new-agent --here works in this terminal once)"
   code .
-  echo "Continue in VS Code: in the window that opened, open the chat (Claude Code extension, or Copilot Chat in Interactive mode) and type /codenow-new-agent (Copilot Chat: ask it to use the codenow-new-agent skill). Nothing else runs in this terminal."
+  if [ "$autostart" = 1 ]; then
+    echo "Continue in VS Code: the task 'CodeNOW: new agent' starts $with in the integrated terminal of the window that opened. Nothing else runs in this terminal."
+    echo "VS Code may ask once to allow automatic tasks (Allow and Run). If nothing starts, run the task 'CodeNOW: new agent' (Terminal → Run Task) or type /codenow-new-agent in the chat."
+  else
+    echo "Continue in VS Code: in the window that opened, open the chat (Claude Code extension, or Copilot Chat in Interactive mode) and type /codenow-new-agent (Copilot Chat: ask it to use the codenow-new-agent skill). Nothing else runs in this terminal."
+  fi
   exit 0
 fi
 
-if [ -z "$with" ]; then
-  for candidate in claude codex copilot; do have "$candidate" && { with="$candidate"; break; }; done
-fi
-[ -n "$with" ] || die "no coding assistant found: install Claude Code, Codex or GitHub Copilot CLI"
-have "$with" || die "$with is not installed"
-
-prompt="Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into $(pwd)."
-slash="/codenow-new-agent"
-if [ "$here" = 1 ]; then
-  export CN_NEW_AGENT_HERE=1
-  prompt="$prompt Work in this terminal (--here): do not switch to VS Code."
-  slash="$slash --here"
-fi
-say "starting $with in $(pwd)"
+pick_assistant || {
+  [ -n "$with" ] && die "$with is not installed"
+  die "no coding assistant found: install Claude Code, Codex or GitHub Copilot CLI"
+}
+say "starting $with in $folder"
 case "$with" in
   claude) exec claude "$slash" ;;
   codex) exec codex "$prompt" ;;

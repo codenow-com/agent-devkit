@@ -24,6 +24,8 @@ Settle this first, before step 0 and before any question about the agent.
    - `VSCODE_PID` (any value)
    - `VSCODE_IPC_HOOK_CLI` (any value)
 
+   When `cn-new-agent` started you through its folder-open task "CodeNOW: new agent", the user is already in VS
+   Code (its integrated terminal).
    Inside VS Code, do not ask where the user works. When `CN_WORKSPACE` in `~/.codenow/config` is not set, save
    `vscode` with `cn-setup --workspace vscode`. Do all steps here, in this chat. Step 5 says how to go on after the
    clone.
