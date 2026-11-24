@@ -118,6 +118,19 @@ def sdk_version(repo: pathlib.Path):
     return found.group(1) if found else None
 
 
+def framework(repo: pathlib.Path):
+    """'CodeNOW Agent SDK <v>' or 'Google ADK <v>' from requirements.txt; None when neither is pinned."""
+    sdk = sdk_version(repo)
+    if sdk:
+        return f"CodeNOW Agent SDK {sdk}"
+    try:
+        text = (repo / "requirements.txt").read_text()
+    except OSError:
+        return None
+    found = re.search(r"^\s*google-adk(?:\[[^\]]*\])?\s*==\s*([0-9][0-9A-Za-z.+-]*)", text, re.M)
+    return f"Google ADK {found.group(1)}" if found else None
+
+
 def identity_mode(repo: pathlib.Path):
     """The first line of sandbox/.run/identity-mode (cn-sandbox up), at most 160 characters; None when missing."""
     try:
@@ -284,6 +297,7 @@ def one_sandbox(project: str, containers: list, docker, refresh: dict) -> dict:
         "token_refresh": {**{k: v for k, v in refresh.items() if k != "projects"},
                           "uses_it": project in refresh.get("projects", [])},
         "sdk_version": sdk_version(repo) if working_dir else None,
+        "framework": framework(repo) if working_dir else None,
         "env": {k: env[k] for k in ENV_KEYS if k in env and k != "CN_IDENTITY_DEVELOPER_CLIENTS"}
         | ({"CN_IDENTITY_DEVELOPER_CLIENTS": "set"} if env.get("CN_IDENTITY_DEVELOPER_CLIENTS") else {}),
     }

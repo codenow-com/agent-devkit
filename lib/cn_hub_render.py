@@ -165,7 +165,7 @@ def card(sb: dict, open_diagram: bool) -> str:
                 if workforce.get("mode") and "mode " not in (workforce.get("line") or "") else "")),
             ("token refresh", e(token_text(sb))),
             ("egress", e(", ".join(h["host"] for h in sb.get("egress") or []) or "no allowlist yet")),
-            ("SDK", e(sb.get("sdk_version") or "not readable"))]
+            ("framework", e(sb.get("framework") or sb.get("sdk_version") or "not pinned in requirements.txt"))]
     project = sb.get("project") or ""
     if project:
         base = "/s/" + quote(project, safe="")
