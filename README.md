@@ -25,8 +25,8 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 
 | Command | Does |
 |---|---|
-| `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
-| `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
+| `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. Asks once whether you build agents with Google ADK (`--adk` runs only that step; below). |
+| `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that) and the Google ADK tools (`cn-doctor --adk`). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. With `CN_WORKSPACE=vscode` it opens VS Code at once instead (`--here`: this terminal). |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token; `cn-sandbox forget` removes your development instance from Workforce. |
 | `cn-venv` | Creates (or updates) the `.venv` of the agent repository you are in and installs its `requirements.txt`: with uv in seconds, else `python3 -m venv` and pip. Never a conda environment. |
@@ -325,6 +325,32 @@ without; uv 15 s with an empty cache, 2 s after `cn-warm`, under 1 s with `UV_OF
 - **Templates.** `cn-warm` takes the highest tag `<name>-v<x.y.z>` of each template repository on
   `gitlab.cloud.codenow.com/codenow-dev/demo-tenant` (`codenow-langchain-agent-sdk`, `demo-tenant-adk-based-agent`);
   `CN_WARM_REPOS="<git url>[#<ref>] ..."` names others. It clones with your git credentials.
+
+## Google ADK tools
+
+The Google ADK VS Code extension checks for `adk` and `gcloud`. CodeNOW ADK agents need only `adk` (`adk web`,
+`adk run`, `adk eval`): they get their models through the CodeNOW agent gateway with your identity and deploy through
+CodeNOW, so `gcloud` is needed only for Google Cloud services such as Vertex AI or `adk deploy`.
+
+```bash
+cn-setup          # asks once: "Do you build agents with Google ADK?" (remembered as CN_ADK=yes|no in ~/.codenow/config)
+cn-setup --adk    # only this step (sets CN_ADK=yes); run it again after a new ADK template version
+cn-doctor --adk   # only its report
+```
+
+- **adk.** `uv tool install --force --python 3.12 google-adk==<pin>`, where `<pin>` is the `google-adk` pin in the
+  `requirements.txt` of the newest ADK template (`demo-tenant-adk-based-agent`, highest tag `<name>-v<x.y.z>`, as
+  `cn-warm`; `CN_ADK_REPO="<git url>[#<ref>]"` names another). It uses the devkit's uv indexes (from `pip.conf`). When
+  the pin cannot be read, it takes the newest `google-adk` on PyPI and says so. It needs uv (`cn-setup` offers it).
+  When the pin changes, `cn-setup` installs the new one.
+- **PATH.** uv puts `adk` in `uv tool dir --bin` (usually `~/.local/bin`). When that folder is not in `PATH`, `cn-setup`
+  asks before it runs `uv tool update-shell`; then open a new terminal and restart VS Code.
+- **gcloud.** Optional: on macOS `cn-setup` offers `brew install --cask google-cloud-sdk` (default no); on Linux it
+  prints https://cloud.google.com/sdk/docs/install. `cn-doctor` never counts it as a problem.
+- **In an ADK agent repository.** `cn-venv` puts `adk` into `.venv/bin` at the agent's own pin. `cn-sandbox status` and
+  `cn-doctor` say so there, and: in the VS Code ADK extension select the interpreter `.venv/bin/python`
+  (Python: Select Interpreter) so it finds `adk`. Port 8000 is `adk web`'s default; the CodeNOW sandbox uses its own
+  port (`SANDBOX_PORT`).
 
 ## Settings and secrets
 

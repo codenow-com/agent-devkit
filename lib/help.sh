@@ -7,10 +7,10 @@
 cn_usage_line() {
   case "$1" in
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
-    cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
+    cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway | --adk]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot] [--here]" ;;
     cn-sandbox) echo "usage: cn-sandbox up [--as-me|--deployment-token]|down|run|logs|events|status|token|as-me|forget|hub" ;;
-    cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
+    cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway | --adk] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-venv) echo "usage: cn-venv [--python <version>]" ;;
     cn-wait) echo "usage: cn-wait build|deploy <swarm> <agent|environment> [build id] [--max <s>]" ;;
@@ -94,7 +94,7 @@ NAME
     cn-doctor - report what this computer lacks for CodeNOW agents
 
 SYNOPSIS
-    cn-doctor [--skip-gateway | --only-gateway]
+    cn-doctor [--skip-gateway | --only-gateway | --adk]
     cn-doctor -h | --help
 
 DESCRIPTION
@@ -102,15 +102,20 @@ DESCRIPTION
     pinniped, openspec, uv, the coding assistants), the devkit version, the
     CodeNOW MCP server in each assistant, the devkit skills, the API key,
     the kubeconfig, the CodeNOW Agent SDK index of pip, the indexes uv
-    uses (credentials masked), the size of the uv cache and the optional
-    developer identity (agent gateway). It changes nothing. It is the
-    same as cn-setup --check.
+    uses (credentials masked), the size of the uv cache, the optional
+    developer identity (agent gateway) and, with CN_ADK=yes, the Google ADK
+    tools: adk (recommended; its version against the ADK template's pin)
+    and gcloud (optional, never a problem). In an ADK agent repository it
+    names the interpreter for the VS Code ADK extension. It changes
+    nothing. It is the same as cn-setup --check.
 
 OPTIONS
     --skip-gateway
         Leave out the report on the developer identity (agent gateway).
     --only-gateway
         Report only on the developer identity (agent gateway).
+    --adk
+        Report only on the Google ADK tools (adk, gcloud).
     -h, --help
         Print this help and exit.
 
@@ -134,6 +139,7 @@ EXIT STATUS
 EXAMPLES
     cn-doctor
     cn-doctor --only-gateway
+    cn-doctor --adk
 
 SEE ALSO
     cn-setup(1), cn-update(1)
@@ -278,7 +284,11 @@ OPTIONS
              ready: ...)); the console login (local dev IdP before the
              first deployment, or the agent's own client); and the console
              URL; in developer mode also `token refresh: running for N
-             sandbox(es)' or `not running'. Then the status of the agent's
+             sandbox(es)' or `not running'. In an ADK agent (google-adk
+             pinned in requirements.txt): whether .venv/bin/adk is there,
+             that the VS Code ADK extension needs the interpreter
+             .venv/bin/python, and that port 8000 is adk web's default (the
+             sandbox has its own port). Then the status of the agent's
              sandbox.sh. Never prints a token.
     as-me off
              Remove the block from .env, remember the choice there (a
@@ -411,8 +421,8 @@ NAME
     cn-setup - prepare this computer for developing CodeNOW agents
 
 SYNOPSIS
-    cn-setup [--skip-gateway | --only-gateway]
-    cn-setup --check [--skip-gateway | --only-gateway]
+    cn-setup [--skip-gateway | --only-gateway | --adk]
+    cn-setup --check [--skip-gateway | --only-gateway | --adk]
     cn-setup --forget-key
     cn-setup --workspace terminal | vscode
     cn-setup -h | --help
@@ -425,7 +435,13 @@ DESCRIPTION
     offers the optional developer identity (agent gateway, oidc-agent)
     and the Workforce (observer) URL for local agents. Without uv it
     offers  brew install uv  on macOS (on Linux it prints the installer
-    command); at the end it offers cn-warm. Never sudo.
+    command); then it offers cn-warm and asks once "Do you build agents
+    with Google ADK?" (CN_ADK). Yes installs the adk CLI (adk web, adk run,
+    adk eval; the VS Code ADK extension needs it) with  uv tool install
+    google-adk==<pin>, the pin of the newest ADK template, and upgrades it
+    when the pin changes; it offers  uv tool update-shell  when uv's tool
+    folder is not in PATH. gcloud is only offered (brew install --cask
+    google-cloud-sdk on macOS): CodeNOW does not need it. Never sudo.
     It never stores a token in ~/.codenow/config.
 
 OPTIONS
@@ -437,6 +453,9 @@ OPTIONS
         Leave out the optional step "Developer identity (agent gateway)".
     --only-gateway
         Run only that step (with --check: only its report).
+    --adk
+        Run only the step "Google ADK tools" and set CN_ADK=yes (with
+        --check: only its report). Needs uv.
     --workspace terminal | vscode
         Save CN_WORKSPACE in ~/.codenow/config, then exit: where
         cn-new-agent runs (terminal: in the same session; vscode: it
@@ -461,6 +480,9 @@ ENVIRONMENT
                            once (Enter skips)
     CN_OIDC_ACCOUNT        the oidc-agent account (default cn-agw)
     OIDC_CONFIG_DIR        the oidc-agent folder
+    CN_ADK                 yes or no: the Google ADK step (saved)
+    CN_ADK_REPO            the ADK template, <git url>[#<ref>], whose
+                           requirements.txt pins google-adk
     CODENOW_HOME           the settings folder (default ~/.codenow)
 
 FILES
@@ -482,6 +504,7 @@ EXAMPLES
     cn-setup
     CODENOW_API_KEY=<key> cn-setup
     cn-setup --only-gateway
+    cn-setup --adk
     cn-setup --forget-key
     cn-setup --workspace vscode
 

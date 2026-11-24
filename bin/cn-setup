@@ -6,6 +6,7 @@
 #   cn-setup --forget-key   remove the API key that cn-call and cn-wait use (~/.codenow/credentials)
 #   cn-setup --skip-gateway   leave out the optional step "Developer identity (agent gateway)"
 #   cn-setup --only-gateway   run only that step (with --check: only its report)
+#   cn-setup --adk            run only the optional step "Google ADK tools" (with --check: only its report)
 #
 # It checks the tools, adds the CodeNOW MCP server to Claude Code, Codex and GitHub Copilot CLI, installs the
 # devkit skills into them, and checks the kubeconfig. Settings: ~/.codenow/config. It never stores a token.
@@ -19,10 +20,12 @@ cn_help_any cn-setup "$@"
 . "$DEVKIT_DIR/lib/sandbox_token.sh"
 . "$DEVKIT_DIR/lib/gateway_setup.sh"
 . "$DEVKIT_DIR/lib/uv_env.sh"
+. "$DEVKIT_DIR/lib/adk_tools.sh"
 CN_CMD=cn-setup
 check=0
 forget=0
 gateway=ask
+adk=ask
 workspace=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -30,12 +33,14 @@ while [ "$#" -gt 0 ]; do
     --forget-key) forget=1 ;;
     --skip-gateway) gateway=skip ;;
     --only-gateway) gateway=only ;;
+    --adk) adk=only ;;
     --workspace) workspace="${2:-none}"; [ "$#" -lt 2 ] || shift ;;
     --workspace=*) workspace="${1#--workspace=}"; workspace="${workspace:-none}" ;;
     *) cn_usage_error "$CN_CMD" "unknown option '$1'" ;;
   esac
   shift
 done
+[ "$adk" != only ] || [ "$gateway" = ask ] || cn_usage_error "$CN_CMD" "--adk runs only the Google ADK step; leave out --$gateway-gateway"
 if [ -n "$workspace" ]; then
   [ "$check" = 0 ] || cn_usage_error cn-doctor "--workspace is not a report; use cn-setup --workspace"
   case "$workspace" in terminal|vscode) ;; *) cn_usage_error cn-setup "--workspace needs terminal or vscode" ;; esac
@@ -64,6 +69,15 @@ if [ "$gateway" = only ]; then
   if [ "$check" = 1 ]; then gateway_report; else gateway_step; fi
   echo
   [ "$problems" = 0 ] && say "developer identity: all good" || { say "$problems problem(s)"; exit 1; }
+  exit 0
+fi
+
+if [ "$adk" = only ]; then
+  for tool in git curl python3; do have "$tool" || die "install $tool first:  $(install_hint "$tool")"; done
+  if [ "$check" = 1 ]; then adk_report explicit; else adk_step explicit; fi
+  adk_repo_hint "$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ "$problems" = 0 ] || { echo; say "$problems problem(s)"; exit 1; }
+  [ "$check" = 1 ] || { echo; say "Google ADK tools: done"; }
   exit 0
 fi
 
@@ -285,6 +299,11 @@ if [ "$check" = 1 ]; then
 elif have uv && ask_yes "Download the dependencies of the agent templates into the uv cache now (cn-warm, about a minute)?"; then
   bash "$DEVKIT_DIR/bin/cn-warm" || note "cn-warm did not cache every template (run cn-warm again later)"
 fi
+
+# 9. Google ADK tools (optional): the adk CLI at the ADK template's pin, gcloud only offered; in an ADK agent
+# repository, where the VS Code ADK extension finds adk.
+if [ "$check" = 1 ]; then adk_report; else adk_step; fi
+adk_repo_hint "$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
 echo
 if [ "$check" = 1 ]; then

@@ -3,7 +3,8 @@
 # sandbox always matches the agent's template version).
 #
 #   cn-sandbox up | run <pipeline> [subject] [json] | logs | events | status | down
-#   cn-sandbox status           the agent's identity, Workforce onboarding and console URL, then sandbox.sh status
+#   cn-sandbox status           the agent's identity, Workforce onboarding and console URL (an ADK agent: the
+#                               interpreter for the VS Code ADK extension), then sandbox.sh status
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
 #   cn-sandbox token --stop     stop the background refresh that `up` started, for every sandbox
@@ -35,6 +36,7 @@ lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
 . "$lib/as_me.sh"
 . "$lib/sandbox_hub.sh"
 . "$lib/sandbox_forget.sh"
+. "$lib/adk_tools.sh"       # adk_repo_hint
 CN_CMD=cn-sandbox
 note() { say "$*"; }
 
@@ -146,6 +148,7 @@ case "${1:-}" in
   status)
     load_config
     asme_identity "$root" "$env_file"
+    adk_repo_hint "$root"   # an ADK agent: the interpreter for the VS Code ADK extension, the ports
     file="$(token_file_path "$env_file")"
     if developer_mode || watch_alive "$file" >/dev/null; then token_share_status "$file"; fi
     exec bash sandbox/sandbox.sh "$@" ;;
