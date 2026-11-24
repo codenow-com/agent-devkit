@@ -21,6 +21,8 @@ EVENT_STREAMS = ("swarm:events", "swarm:debug")
 CONTENT_CAP = 16000     # characters of one content body in a run detail
 RUN_EVENTS_CAP = 1000
 STREAM_ID = re.compile(r"^\d{1,20}(-\d{1,20})?$")
+EXCLUDE_KIND = re.compile(r"^[a-z0-9_.:-]{1,64}$")
+EXCLUDE_MAX = 20        # kinds in one exclude list
 SIZE_OF = {"stream": "XLEN", "list": "LLEN", "hash": "HLEN", "set": "SCARD", "zset": "ZCARD", "string": "STRLEN"}
 
 
@@ -104,35 +106,54 @@ def kind_of(entry: dict) -> str:
     return str(event.get("kind") or "")
 
 
-def stream_view(sb, key: str, before: str = "", kind: str = "", scan: int = 2000) -> dict:
-    """One page (PAGE entries) of a stream, newest first, before the id `before`; `kind` keeps one event kind."""
+def parse_exclude(raw) -> list:
+    """`exclude=a,b` (text or list) → the valid kinds ([a-z0-9_.:-]), at most EXCLUDE_MAX, in order, no repeats."""
+    parts = raw if isinstance(raw, (list, tuple)) else str(raw or "").split(",")
+    out = []
+    for part in parts:
+        part = str(part).strip()
+        if EXCLUDE_KIND.match(part) and part not in out:
+            out.append(part)
+    return out[:EXCLUDE_MAX]
+
+
+def stream_view(sb, key: str, before: str = "", kind: str = "", scan: int = 2000, exclude=()) -> dict:
+    """One page (PAGE entries) of a stream, newest first, before the id `before`; `kind` keeps one event kind,
+    then `exclude` drops kinds. Reads in batches until the page is full or `scan` entries were looked at; `skipped`
+    counts the excluded entries per kind and `next` continues after the last entry looked at."""
     end = "(" + before if before and STREAM_ID.match(before) else "+"
-    rows, looked, cursor, exhausted = [], 0, None, False
+    exclude = parse_exclude(exclude)
+    rows, looked, cursor, exhausted, skipped = [], 0, None, False, {}
     while len(rows) < PAGE and looked < scan and not exhausted:
-        count = PAGE - len(rows) if not kind else 500
+        count = PAGE - len(rows) if not (kind or exclude) else min(500, scan - looked)
         chunk = parse_entries(sb.valkey(["XREVRANGE", key, end, "-", "COUNT", str(count)])[0])
         looked += len(chunk)
         seen = 0
         for entry in chunk:
             cursor, seen = entry["id"], seen + 1
-            if not kind or kind_of(entry) == kind:
-                rows.append(entry)
-                if len(rows) == PAGE:
-                    break
+            this = kind_of(entry)
+            if kind and this != kind:
+                continue
+            if this in exclude:
+                skipped[this] = skipped.get(this, 0) + 1
+                continue
+            rows.append(entry)
+            if len(rows) == PAGE:
+                break
         exhausted = len(chunk) < count and seen == len(chunk)
         end = "(" + str(cursor)
     length = sb.valkey(["XLEN", key])[0]
     return {"entries": rows, "next": None if exhausted or cursor is None else cursor, "length": length,
-            "kind": kind}
+            "kind": kind, "exclude": exclude, "skipped": skipped, "scanned": looked, "scan_cap": scan}
 
 
-def key_view(sb, key: str, before: str = "", kind: str = "") -> dict:
+def key_view(sb, key: str, before: str = "", kind: str = "", exclude=()) -> dict:
     """One key by its type: stream page, hash fields, list items, set members, zset members, or a string's start."""
     key = key[:1000]
     kind_reply, ttl = sb.valkey(["TYPE", key], ["TTL", key])
     out = {"key": key, "type": kind_reply or "none", "ttl": ttl}
     if kind_reply == "stream":
-        out.update(stream_view(sb, key, before, kind))
+        out.update(stream_view(sb, key, before, kind, exclude=exclude))
     elif kind_reply == "hash":
         size = sb.valkey(["HLEN", key])[0] or 0
         if size <= FIELD_CAP:
