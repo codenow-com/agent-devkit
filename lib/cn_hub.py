@@ -6,10 +6,13 @@
     python3 lib/cn_hub.py --json             print the collected sandboxes once and exit
 
 Routes: `/` the page, `/cards` the cards alone (the page reloads them every 5 s), `/api/sandboxes` the JSON,
-`/api/hub` the hub's own name (for --ping). The data comes from Docker only (the compose projects named sandbox-*,
+`/api/hub` the hub's own name (for --ping). Per sandbox (read only, lib/cn_hub_data.py): `/s/<project>/runs`,
+`/s/<project>/runs/<run_id>`, `/s/<project>/valkey`, `/s/<project>/valkey/<key>`, `/s/<project>/search?q=`, and
+the JSON under `/api/s/<project>/`: `runs`, `runs/<run_id>`, `valkey/keys`, `valkey/key?key=`, `search?q=`. The data comes from Docker only (the compose projects named sandbox-*,
 their labels, states, ports and the agent's log) and from the sandbox's own state files in the agent repository
 (sandbox/.run/allow, sandbox/.run/port). It never reads a token: from .env it keeps only four non-secret keys, and
-everything that looks like a token is masked before it leaves this process. Standard library only.
+everything that looks like a token is masked before it leaves this process. The run store and Valkey of a sandbox
+are read with `docker exec` (lib/cn_hub_exec.py: SELECT in a READ ONLY transaction, Valkey read commands only). Standard library only.
 """
 from __future__ import annotations
 
@@ -29,7 +32,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import cn_hub_render as render  # noqa: E402  (next to this file)
+import cn_hub_data as data_routes  # noqa: E402  (next to this file)
+import cn_hub_render as render  # noqa: E402
 
 HUB_NAME = "cn-sandbox-hub"
 PREFIX = "sandbox-"
@@ -37,32 +41,7 @@ ENV_KEYS = ("CN_IDENTITY_PROVIDER", "CN_IDENTITY_DEVELOPER_CLIENTS", "WORKFORCE_
 LOG_TAIL = "3000"
 CORE_SERVICES = ("agent", "edge", "egress", "runstore", "valkey")
 
-_JWT = re.compile(r"eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}(?:\.[A-Za-z0-9_-]*)?")
-_BEARER = re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}")
-_ASSIGN = re.compile(r"(?i)\b([A-Z0-9_]*(?:token|secret|password|passwd|api_key|apikey)[A-Z0-9_]*)\s*([=:])\s*[^\s,;)]+")
-_LONG = re.compile(r"\b[A-Za-z0-9_-]{48,}\b")
-
-
-def mask(text: str) -> str:
-    """Everything that may be a credential, replaced: JWTs, bearer values, KEY=value of secret-like keys."""
-    text = _JWT.sub("<token>", text)
-    text = _BEARER.sub(r"\1 <token>", text)
-    return _ASSIGN.sub(r"\1\2<masked>", text)
-
-
-def mask_log(text: str) -> str:
-    """A log line: mask(), and every long opaque string as well."""
-    return _LONG.sub("<masked>", mask(text))
-
-
-def mask_all(value):
-    if isinstance(value, str):
-        return mask(value)
-    if isinstance(value, list):
-        return [mask_all(v) for v in value]
-    if isinstance(value, dict):
-        return {k: mask_all(v) for k, v in value.items()}
-    return value
+from cn_hub_exec import mask, mask_all, mask_log  # noqa: E402,F401  (one masking for the whole hub)
 
 
 def run_docker(*args: str) -> str:
@@ -334,8 +313,13 @@ def make_handler(cache: Cache, port: int):
             if self.headers.get("Host", "") not in allowed_hosts:
                 self.send(403, "forbidden host\n", "text/plain; charset=utf-8")
                 return
-            path = urlparse(self.path).path
-            if path == "/api/hub":
+            url = urlparse(self.path)
+            path = url.path
+            if path.startswith(("/s/", "/api/s/")):
+                projects = [sb.get("project") for sb in cache.get()]
+                code, body, kind = data_routes.handle(path, url.query, projects)
+                self.send(code, body, kind)
+            elif path == "/api/hub":
                 self.send(200, json.dumps({"hub": HUB_NAME}), "application/json")
             elif path == "/api/sandboxes":
                 self.send(200, json.dumps({"sandboxes": cache.get()}, indent=1), "application/json")

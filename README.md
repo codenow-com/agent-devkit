@@ -191,6 +191,26 @@ every 5 s. Per sandbox it shows:
 - a diagram of how this sandbox is connected: browser, edge, agent, runstore and valkey on the inner network (no
   internet), and egress to each allowlisted host on the outer network, plus the token the agent uses.
 
+### Runs, Valkey and search of one sandbox
+
+Each card links to three read-only views of that sandbox's own data (`<project>` is the compose project, for
+example `sandbox-customs-tariff-advisor`):
+
+| Page | JSON | Shows |
+|---|---|---|
+| `/s/<project>/runs` | `/api/s/<project>/runs` | the run store's runs, newest first, 50 per page: time, pipeline, subject, status, duration, cost, `developer` and `env_class`; filters `status=`, `pipeline=`, `since=1h\|24h\|7d\|30d`, `page=` |
+| `/s/<project>/runs/<run_id>` | `/api/s/<project>/runs/<run_id>` | one run: stages on a timeline, tool calls (arguments, result, duration), summary, error, output, halt handoff, facts, cost and tokens, its events from `swarm:events` (each links to its place in the stream), and the whole row as JSON |
+| `/s/<project>/valkey` | `/api/s/<project>/valkey/keys?pattern=` | the keys of a pattern (`SCAN`, at most 1000) with type, TTL and size |
+| `/s/<project>/valkey/<key>` | `/api/s/<project>/valkey/key?key=` | one key: a stream newest first (50 per page, `before=<id>`, filter `kind=`), hash fields, list items, set and sorted-set members, the first 4 KB of a string |
+| `/s/<project>/search?q=` | `/api/s/<project>/search?q=` | runs (id prefix, subject, pipeline, status, summary, error, output), events (the newest 5000 entries of `swarm:events` and `swarm:debug`) and key names |
+
+The run store and Valkey are not published to your computer: the hub reads them with `docker exec` into the
+sandbox's `runstore` and `valkey` containers, each with a timeout of 8 s. Postgres gets only SELECTs that the hub
+builds, in a `READ ONLY` transaction, with every value from the page as a psql variable; it reads only `agent_runs`
+and adapts to the columns of older SDK versions. Valkey gets only read commands (`SCAN`, `TYPE`, `TTL`, `XRANGE`,
+`XREVRANGE`, `HGETALL`, `LRANGE`, ...). Every answer is capped and masked: JWTs, bearer values, the values of keys
+named like a token, secret, password or API key, and long opaque strings.
+
 The hub only reads: Docker (`docker ps`, `docker inspect`, the agent's log), `sandbox/.run/allow` and
 `sandbox/.run/port` of the repository, and four non-secret keys of `.env` (`CN_IDENTITY_PROVIDER`,
 `CN_IDENTITY_DEVELOPER_CLIENTS`, `WORKFORCE_URL`, `WORKFORCE_MODE`). It masks anything that looks like a token.

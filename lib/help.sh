@@ -268,7 +268,15 @@ OPTIONS
              Workforce onboarding, egress allowlist and a diagram of how it
              is connected, with the link to each agent's console. It
              reads Docker, changes nothing and never shows a token. Works
-             in any folder.
+             in any folder. Per sandbox, read only (docker exec):
+               /s/<project>/runs[/<run_id>]   the run store: runs, filters,
+                                              one run with stages, tool
+                                              calls, output and its events
+               /s/<project>/valkey[/<key>]    Valkey keys; a stream newest
+                                              first, filtered by event kind
+               /s/<project>/search?q=         runs, events and key names
+             The same as JSON under /api/s/<project>/: runs, runs/<run_id>,
+             valkey/keys?pattern=, valkey/key?key=, search?q=.
     hub --stop
              Stop the hub.
     hub --status

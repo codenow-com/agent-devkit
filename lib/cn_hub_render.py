@@ -5,6 +5,7 @@ Pure functions of the collected data; the page has no external resource and esca
 from __future__ import annotations
 
 from html import escape
+from urllib.parse import quote
 
 REFRESH_MS = 5000
 LOCAL_PEERS = ("observer", "devidp")
@@ -155,6 +156,11 @@ def card(sb: dict, open_diagram: bool) -> str:
             ("token refresh", e(token_text(sb))),
             ("egress", e(", ".join(h["host"] for h in sb.get("egress") or []) or "no allowlist yet")),
             ("SDK", e(sb.get("sdk_version") or "not readable"))]
+    project = sb.get("project") or ""
+    if project:
+        base = "/s/" + quote(project, safe="")
+        rows.append(("data", f'<a href="{e(base)}/runs">Runs</a> · <a href="{e(base)}/valkey">Valkey</a> · '
+                             f'<a href="{e(base)}/search">Search</a> <span class="muted">(read only)</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     return (f'<article class="card {e(status)}" id="sb-{e(name)}">'
             f'<header><h2>{e(name)}</h2>{status_chip(status)}{identity_chip(sb.get("identity"))}'
@@ -210,7 +216,7 @@ background:var(--mutedbg);color:var(--muted)}
 .hint{color:var(--muted)}
 code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--mutedbg);padding:1px 5px;border-radius:4px}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0;font-size:13px}
-dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}dd a{color:var(--accent);font-weight:600}
 .svc{display:inline-block;margin:0 6px 2px 0}.svc:before{content:"";display:inline-block;width:8px;height:8px;
 border-radius:50%;margin-right:4px;background:var(--muted)}.svc.on:before{background:var(--ok)}
 .muted{color:var(--muted)}
