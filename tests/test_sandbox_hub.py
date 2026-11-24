@@ -172,7 +172,7 @@ class CollectorTest(unittest.TestCase):
     def test_page_links_consoles_and_draws_one_diagram_per_sandbox(self):
         html = cn_hub_render.page(sorted(self.data.values(), key=lambda s: s["name"]))
         self.assertIn("<h1>CodeNOW agent sandboxes</h1>", html)
-        self.assertEqual(html.count("<svg"), 3)
+        self.assertEqual(html.count('<svg class="dia"'), 3)
         self.assertEqual(html.count('aria-label="How the sandbox'), 3)
         self.assertIn('href="http://localhost:8081/" target="_blank"', html)
         self.assertIn('href="http://localhost:8082/" target="_blank"', html)
@@ -188,7 +188,7 @@ class CollectorTest(unittest.TestCase):
     def test_empty_state(self):
         html = cn_hub_render.page([])
         self.assertIn("No sandbox runs. In an agent repository: <code>cn-sandbox up --as-me</code>", html)
-        self.assertNotIn("<svg", html)
+        self.assertNotIn('<svg class="dia"', html)
 
 
 class HubCommandTest(unittest.TestCase):

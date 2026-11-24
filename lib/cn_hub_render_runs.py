@@ -9,6 +9,7 @@ import datetime
 import json
 from urllib.parse import quote, urlencode
 
+from cn_hub_logo import FAVICON_LINK, LOGO_STYLE, title_row
 from cn_hub_render import STYLE, chip, cut, e
 from cn_hub_render_exclude import EXCLUDE_STYLE, RUN_HIDDEN_LINE, RUN_SCRIPT, run_x
 
@@ -116,9 +117,10 @@ def shell(title: str, project: str, body: str, active: str = "") -> str:
     return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<meta name=\"color-scheme\" content=\"light dark\">"
-            f"<title>{e(title)}</title><style>{STYLE}{EXTRA_STYLE}{EXCLUDE_STYLE}</style></head>"
+            f"<title>{e(title)}</title>{FAVICON_LINK}"
+            f"<style>{STYLE}{LOGO_STYLE}{EXTRA_STYLE}{EXCLUDE_STYLE}</style></head>"
             "<body><main class=\"wide\">"
-            f"{head}<h1>{e(title)}</h1>{tabs(project, active) if project else ''}{body}</main></body></html>")
+            f"{head}{title_row(title)}{tabs(project, active) if project else ''}{body}</main></body></html>")
 
 
 def select(name: str, label: str, options: list, current: str) -> str:

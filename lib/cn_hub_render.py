@@ -7,6 +7,8 @@ from __future__ import annotations
 from html import escape
 from urllib.parse import quote
 
+from cn_hub_logo import FAVICON_LINK, LOGO_STYLE, title_row
+
 REFRESH_MS = 5000
 LOCAL_PEERS = ("observer", "devidp")
 EMPTY = "No sandbox runs. In an agent repository: <code>cn-sandbox up --as-me</code>"
@@ -266,8 +268,8 @@ def page(sandboxes: list) -> str:
     return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<meta name=\"color-scheme\" content=\"light dark\">"
-            f"<title>Agent sandboxes</title><style>{STYLE}</style></head><body><main>"
-            "<h1>CodeNOW agent sandboxes</h1>"
+            f"<title>Agent sandboxes</title>{FAVICON_LINK}<style>{STYLE}{LOGO_STYLE}</style></head><body><main>"
+            f"{title_row('CodeNOW agent sandboxes')}"
             "<p class=\"sub\">Every local agent sandbox on this computer, from Docker. Refreshes every 5 s; "
             "<span id=\"stamp\">live</span>. Stop this page: <code>cn-sandbox hub --stop</code></p>"
             f"<div id=\"cards\">{cards(sandboxes)}</div>{LEGEND}</main>"
