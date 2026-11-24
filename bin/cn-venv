@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# cn-venv: create or update the .venv of the agent repository you are in and install its requirements.txt: with uv
+# when it is installed (the tenant's index from pip.conf, the uv cache that cn-warm fills), else python3 -m venv and
+# pip. Never a conda environment.
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-venv "$@"
+python_version="3.12"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --python) [ "$#" -ge 2 ] || cn_usage_error cn-venv "--python needs a version"; python_version="$2"; shift ;;
+    --python=*) python_version="${1#--python=}" ;;
+    *) cn_usage_error cn-venv "unknown option '$1'" ;;
+  esac
+  shift
+done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+. "$DEVKIT_DIR/lib/uv_env.sh"
+CN_CMD=cn-venv
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$root"
+[ -f requirements.txt ] || die "no requirements.txt in $root: run it in the agent repository"
+links=()
+if ls sandbox/wheels/*.whl >/dev/null 2>&1; then links=(--find-links sandbox/wheels); fi
+# Never conda: the environment is .venv, built on a Python that is not the conda one, also in a shell in conda base.
+unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL CONDA_PROMPT_MODIFIER
+log="$(mktemp "${TMPDIR:-/tmp}/cn-venv.XXXXXX")"
+trap 'rm -f "$log"' EXIT
+start=$(date +%s)
+if have uv; then
+  say "uv $(uv --version 2>/dev/null | awk '{print $2}'), Python $python_version; $(cn_uv_indexes)"
+  cn_uv_env || die "cannot read the pip settings (lib/uv_env.py)"
+  export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-only-managed}"
+  if [ ! -x .venv/bin/python ]; then
+    uv venv -q --python "$python_version" .venv >"$log" 2>&1 || { cn_mask < "$log" >&2; die "uv venv failed"; }
+  fi
+  if ! VIRTUAL_ENV="$root/.venv" uv pip install -q ${links[@]+"${links[@]}"} -r requirements.txt >"$log" 2>&1; then
+    tail -n 12 "$log" | cn_mask >&2
+    die "uv could not install requirements.txt; a 403 or 'not found' for codenow-agent-sdk: cn-doctor (the SDK index in pip.conf)"
+  fi
+else
+  py=""
+  for candidate in "python$python_version" python3; do
+    if have "$candidate" && [ "$("$candidate" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" = "$python_version" ]; then
+      py="$candidate"; break
+    fi
+  done
+  [ -n "$py" ] || die "no Python $python_version found; install uv ($(install_hint uv)) or Python $python_version"
+  say "no uv: $py -m venv and pip (slower; cn-setup offers uv)"
+  if [ ! -x .venv/bin/python ]; then "$py" -m venv .venv >"$log" 2>&1 || { cn_mask < "$log" >&2; die "python -m venv failed"; }; fi
+  if ! .venv/bin/python -m pip install -q --disable-pip-version-check ${links[@]+"${links[@]}"} -r requirements.txt >"$log" 2>&1; then
+    tail -n 12 "$log" | cn_mask >&2
+    die "pip could not install requirements.txt; a 403 or 'from versions: none' for codenow-agent-sdk: cn-doctor"
+  fi
+fi
+say ".venv ready in $(( $(date +%s) - start )) s ($(.venv/bin/python --version 2>&1)); next: bash scripts/check.sh"

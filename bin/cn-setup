@@ -18,6 +18,7 @@ cn_help_any cn-setup "$@"
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
 . "$DEVKIT_DIR/lib/sandbox_token.sh"
 . "$DEVKIT_DIR/lib/gateway_setup.sh"
+. "$DEVKIT_DIR/lib/uv_env.sh"
 CN_CMD=cn-setup
 check=0
 forget=0
@@ -113,7 +114,15 @@ if have openspec; then
   else note "openspec $openspec_v is older than $openspec_min:  $(install_hint openspec)"; fi
 elif have npm; then note "openspec is missing (every agent change goes through OpenSpec):  $(install_hint openspec)"
 else note "openspec is missing and needs Node.js:  $(install_hint node), then  $(install_hint openspec)"; fi
-have conda && say "found conda" || say "not found: conda (optional; a .venv works too)"
+# uv (recommended): an agent's .venv in seconds instead of a minute with pip (cn-venv; cn-warm fills its cache).
+# Installed only with consent, and only through brew; never with sudo, never curl | sh.
+if ! have uv && [ "$check" = 0 ] && [ "$(uname -s)" = Darwin ] && have brew \
+  && ask_yes "uv is missing (recommended: an agent's .venv in seconds). Run  brew install uv  now?"; then
+  brew install uv || say "brew did not install uv"
+fi
+if have uv; then say "found uv $(uv --version 2>/dev/null | awk '{print $2}'); $(cn_uv_indexes)"
+else say "not found: uv (recommended: an agent's .venv in seconds instead of a minute):  $(install_hint uv)"; fi
+have conda && say "found conda (not used: an agent gets a .venv, never a conda environment)"
 for tool in claude codex copilot; do
   if have "$tool"; then say "found $tool"; else say "not found: $tool (optional):  $(install_hint "$tool")"; fi
 done
@@ -268,6 +277,13 @@ elif [ "$gateway" != skip ]; then
   else
     say "developer identity (agent gateway): skipped; later: cn-setup --only-gateway"
   fi
+fi
+
+# 8. The uv cache (optional): the dependencies of the newest agent templates, so a new agent's .venv needs no download.
+if [ "$check" = 1 ]; then
+  have uv && say "uv cache: $(cn_uv_cache_size) in $(uv cache dir 2>/dev/null) (cn-warm fills it)"
+elif have uv && ask_yes "Download the dependencies of the agent templates into the uv cache now (cn-warm, about a minute)?"; then
+  bash "$DEVKIT_DIR/bin/cn-warm" || note "cn-warm did not cache every template (run cn-warm again later)"
 fi
 
 echo

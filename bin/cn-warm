@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# cn-warm: download the dependencies of the newest published CodeNOW agent templates into the uv cache, so a new
+# agent's .venv (cn-venv) installs in seconds and works offline (UV_OFFLINE=1).
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-warm "$@"
+[ "$#" = 0 ] || cn_usage_error cn-warm "unknown option '$1'"
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
+. "$DEVKIT_DIR/lib/uv_env.sh"
+CN_CMD=cn-warm
+
+# The two templates; their newest publication is the highest tag <name>-v<x.y.z> (else the default branch).
+CN_WARM_REPOS_DEFAULT="https://gitlab.cloud.codenow.com/codenow-dev/demo-tenant/codenow-langchain-agent-sdk.git
+https://gitlab.cloud.codenow.com/codenow-dev/demo-tenant/demo-tenant-adk-based-agent.git"
+repos="${CN_WARM_REPOS:-$CN_WARM_REPOS_DEFAULT}"
+python_version="${CN_WARM_PYTHON:-3.12}"
+
+have uv || die "uv is missing:  $(install_hint uv)  (cn-setup offers to install it)"
+have git || die "git is missing:  $(install_hint git)"
+say "$(cn_uv_indexes)"
+cn_uv_env || die "cannot read the pip settings (lib/uv_env.py)"
+# The same Python as cn-venv (uv's own, never conda's), so it is cached too.
+unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL CONDA_PROMPT_MODIFIER
+export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-only-managed}"
+say "uv cache: $(uv cache dir 2>/dev/null || echo unknown) ($(cn_uv_cache_size) before)"
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/cn-warm.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+export GIT_TERMINAL_PROMPT=0
+failed=0
+total_start=$(date +%s)
+n=0
+for repo in $repos; do
+  n=$((n + 1))
+  url="${repo%%#*}"; ref=""
+  case "$repo" in *#*) ref="${repo#*#}" ;; esac
+  name="$(basename "$url" .git)"
+  if [ -z "$ref" ]; then
+    ref="$(git ls-remote --tags --refs "$url" 2>/dev/null | sed 's#.*refs/tags/##' \
+      | grep -E -- '-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+  fi
+  dir="$work/$n"
+  if [ -n "$ref" ]; then
+    git clone -q --depth 1 --branch "$ref" "$url" "$dir" >/dev/null 2>&1 || { say "$name: cannot clone $ref"; failed=$((failed + 1)); continue; }
+  else
+    git clone -q --depth 1 "$url" "$dir" >/dev/null 2>&1 || { say "$name: cannot clone (no access? git credentials)"; failed=$((failed + 1)); continue; }
+    ref="default branch"
+  fi
+  if [ ! -f "$dir/requirements.txt" ]; then say "$name ($ref): no requirements.txt"; failed=$((failed + 1)); continue; fi
+  start=$(date +%s)
+  # A throwaway environment fills the cache; the environment goes, the cache stays.
+  if ! uv venv -q --python "$python_version" "$work/venv-$n" >"$work/log" 2>&1 \
+    || ! (cd "$dir" && VIRTUAL_ENV="$work/venv-$n" uv pip install -q -r requirements.txt) >>"$work/log" 2>&1; then
+    say "$name ($ref): uv could not install requirements.txt:"
+    tail -n 8 "$work/log" | cn_mask | sed "s/^/  /"
+    failed=$((failed + 1)); continue
+  fi
+  took=$(( $(date +%s) - start ))
+  # Proof: the same pins install again from the cache alone.
+  rm -rf "$work/venv-$n"
+  if uv venv -q --python "$python_version" "$work/venv-$n" >/dev/null 2>&1 \
+    && (cd "$dir" && UV_OFFLINE=1 VIRTUAL_ENV="$work/venv-$n" uv pip install -q -r requirements.txt) >/dev/null 2>&1; then
+    say "$name ($ref): cached in ${took} s; offline install: ok"
+  else
+    say "$name ($ref): cached in ${took} s; the offline install failed"
+    failed=$((failed + 1))
+  fi
+  rm -rf "$work/venv-$n" "$dir"
+done
+say "done in $(( $(date +%s) - total_start )) s; uv cache: $(cn_uv_cache_size)"
+[ "$failed" = 0 ] || { say "$failed template(s) not cached"; exit 1; }
+say "a new agent: cn-venv (or  UV_OFFLINE=1 uv pip install -r requirements.txt  in its .venv)"

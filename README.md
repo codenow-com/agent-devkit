@@ -29,6 +29,8 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. With `CN_WORKSPACE=vscode` it opens VS Code at once instead (`--here`: this terminal). |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
+| `cn-venv` | Creates (or updates) the `.venv` of the agent repository you are in and installs its `requirements.txt`: with uv in seconds, else `python3 -m venv` and pip. Never a conda environment. |
+| `cn-warm` | Downloads the dependencies of the newest published agent templates into the uv cache, so `cn-venv` of a new agent needs no download and works offline (below). |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
@@ -234,6 +236,36 @@ The hub only reads: Docker (`docker ps`, `docker inspect`, the agent's log), `sa
 | `CN_SANDBOX_HUB` | `on` | `off`: `cn-sandbox up` does not start the hub |
 
 The pid and log are in `~/.codenow/sandbox-hub/`.
+
+## Fast Python environments with uv
+
+An agent's `.venv` (for `bash scripts/check.sh`) takes about 45 s with pip, a minute or more on a new computer. With
+[uv](https://docs.astral.sh/uv/) and a filled cache it takes 2 s:
+
+```bash
+brew install uv          # cn-setup offers it on macOS; Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
+cn-warm                  # once, and after a new template version: fills ~/.cache/uv
+cn-venv                  # in the agent repository: .venv with requirements.txt
+```
+
+Measured on a Mac for the LangChain template's `requirements.txt` (SDK 2.24.0): pip 44 s with its own cache, 168 s
+without; uv 15 s with an empty cache, 2 s after `cn-warm`, under 1 s with `UV_OFFLINE=1`.
+
+- **The SDK index.** uv does not read `pip.conf`. The devkit reads it (index-url, extra-index-url, the files and
+  `PIP_*` variables in pip's order) and gives uv every index except public PyPI as `UV_EXTRA_INDEX_URL`, for its own
+  commands only: the tenant's `extra-index-url` first, then public PyPI, then pip's `index-url` (a JFrog proxy of PyPI
+  is slow, so it is asked last). Public PyPI stays uv's default index. A JFrog URL without `/simple` gets it (uv needs
+  it). `UV_INDEX_STRATEGY=unsafe-first-match`: the tenant index answers 403 for a package it does not hold, and uv's
+  default strategy stops there; a package still comes from the first index that has it. The credentials in the URLs
+  are never printed (`https://***@...`) and never written to a file. Your own `UV_INDEX`, `UV_INDEX_URL`,
+  `UV_DEFAULT_INDEX`, `UV_EXTRA_INDEX_URL` or `UV_INDEX_STRATEGY` stay as they are.
+- **Python.** `cn-venv` and `cn-warm` use uv's own Python 3.12 (`UV_PYTHON_PREFERENCE=only-managed`), never the conda
+  one, also in a shell in conda base.
+- **Cache.** `~/.cache/uv` (`uv cache dir`; `UV_CACHE_DIR` moves it). On Linux the devkit sets `UV_LINK_MODE=hardlink`;
+  on macOS uv clones files from the cache (copy-on-write). `cn-doctor` prints the indexes (masked) and the cache size.
+- **Templates.** `cn-warm` takes the highest tag `<name>-v<x.y.z>` of each template repository on
+  `gitlab.cloud.codenow.com/codenow-dev/demo-tenant` (`codenow-langchain-agent-sdk`, `demo-tenant-adk-based-agent`);
+  `CN_WARM_REPOS="<git url>[#<ref>] ..."` names others. It clones with your git credentials.
 
 ## Settings and secrets
 

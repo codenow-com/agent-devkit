@@ -47,8 +47,8 @@ class HelpTest(unittest.TestCase):
         self.assertFalse(self.log.exists(), f"{command} ran: {self.log.read_text() if self.log.exists() else ''}")
 
     def test_every_command_is_covered(self):
-        self.assertEqual(COMMANDS, ["cn-call", "cn-doctor", "cn-new-agent", "cn-sandbox", "cn-setup", "cn-update",
-                                    "cn-wait"])
+        self.assertEqual(COMMANDS, ["cn-call", "cn-doctor", "cn-new-agent", "cn-sandbox", "cn-setup", "cn-update", "cn-venv",
+                                    "cn-wait", "cn-warm"])
 
     def test_help_prints_the_manual_and_does_nothing_else(self):
         for command in COMMANDS:

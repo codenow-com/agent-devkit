@@ -53,6 +53,7 @@ install_hint() {
       node) echo "brew install node" ;;
       openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
       oidc-agent) echo "brew tap indigo-dc/oidc-agent && brew install oidc-agent" ;;
+      uv) echo "brew install uv" ;;
       *) echo "brew install $1" ;;
     esac
   else
@@ -68,6 +69,7 @@ install_hint() {
       node) echo "Node.js 22 LTS: https://nodejs.org/en/download (or nvm install 22)" ;;
       openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
       oidc-agent) echo "oidc-agent 5.2+ from http://repo.data.kit.edu (Debian and Ubuntu ship an older one)" ;;
+      uv) echo "curl -LsSf https://astral.sh/uv/install.sh | sh  (installs into ~/.local/bin, no sudo)" ;;
       *) echo "sudo apt-get install -y $1" ;;
     esac
   fi

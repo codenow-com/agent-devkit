@@ -12,7 +12,9 @@ cn_usage_line() {
     cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me|hub [args]" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
+    cn-venv) echo "usage: cn-venv [--python <version>]" ;;
     cn-wait) echo "usage: cn-wait build|deploy <swarm> <agent|environment> [build id] [--max <s>]" ;;
+    cn-warm) echo "usage: cn-warm" ;;
   esac
 }
 
@@ -97,9 +99,10 @@ SYNOPSIS
 
 DESCRIPTION
     Reports the tools (git, curl, python3, Docker with Compose, kubectl,
-    pinniped, openspec, the coding assistants), the devkit version, the
+    pinniped, openspec, uv, the coding assistants), the devkit version, the
     CodeNOW MCP server in each assistant, the devkit skills, the API key,
-    the kubeconfig, the CodeNOW Agent SDK index of pip and the optional
+    the kubeconfig, the CodeNOW Agent SDK index of pip, the indexes uv
+    uses (credentials masked), the size of the uv cache and the optional
     developer identity (agent gateway). It changes nothing. It is the
     same as cn-setup --check.
 
@@ -374,7 +377,9 @@ DESCRIPTION
     skills into them and checks the kubeconfig and the CodeNOW Agent SDK
     index of pip. Asks once for the MCP URL and the kubeconfig path, then
     offers the optional developer identity (agent gateway, oidc-agent)
-    and the Workforce (observer) URL for local agents.
+    and the Workforce (observer) URL for local agents. Without uv it
+    offers  brew install uv  on macOS (on Linux it prints the installer
+    command); at the end it offers cn-warm. Never sudo.
     It never stores a token in ~/.codenow/config.
 
 OPTIONS
@@ -435,7 +440,7 @@ EXAMPLES
     cn-setup --workspace vscode
 
 SEE ALSO
-    cn-doctor(1), cn-update(1), cn-new-agent(1), cn-call(1)
+    cn-doctor(1), cn-update(1), cn-new-agent(1), cn-call(1), cn-warm(1)
 EOF
     ;;
     cn-update) cat <<'EOF'
@@ -476,6 +481,66 @@ EXAMPLES
 
 SEE ALSO
     cn-setup(1), cn-doctor(1)
+EOF
+    ;;
+    cn-venv) cat <<'EOF'
+NAME
+    cn-venv - create the .venv of the agent repository you are in
+
+SYNOPSIS
+    cn-venv [--python <version>]
+    cn-venv -h | --help
+
+DESCRIPTION
+    Creates .venv in the top folder of the agent repository (or updates
+    it) and installs its requirements.txt, with sandbox/wheels as an
+    extra source when it holds wheels. Never a conda environment, also
+    in a shell in conda base.
+    With uv: uv venv and uv pip install, on uv's own Python. The CodeNOW
+    Agent SDK index comes from your pip.conf (uv does not read pip.conf):
+    the devkit puts every index of pip.conf except public PyPI into
+    UV_EXTRA_INDEX_URL for this command only and never prints or writes
+    the credentials. After cn-warm it takes seconds and works offline
+    (UV_OFFLINE=1).
+    Without uv: python<version> -m venv and pip (pip reads pip.conf).
+
+OPTIONS
+    --python <version>
+        The Python version (default 3.12, as in the agent's image).
+    -h, --help
+        Print this help and exit.
+
+ENVIRONMENT
+    UV_EXTRA_INDEX_URL, UV_INDEX, UV_INDEX_URL, UV_DEFAULT_INDEX
+        Set by you: kept, and pip.conf is not read for uv.
+    UV_INDEX_STRATEGY  default unsafe-first-match (a tenant index answers
+                       403 for packages it does not hold)
+    UV_LINK_MODE       default hardlink on Linux; uv's clone on macOS
+    UV_PYTHON_PREFERENCE
+                       default only-managed (uv's Python, not conda's)
+    UV_CACHE_DIR       uv's cache (default ~/.cache/uv)
+    UV_OFFLINE         1: install from the cache only
+
+FILES
+    requirements.txt, .venv, sandbox/wheels
+        In the agent repository.
+    ~/.pip/pip.conf, ~/.config/pip/pip.conf
+        index-url and extra-index-url (also PIP_INDEX_URL,
+        PIP_EXTRA_INDEX_URL and PIP_CONFIG_FILE).
+
+EXIT STATUS
+    0    .venv ready
+    1    no requirements.txt, no Python, or the install failed (the last
+         lines of the output, credentials masked)
+    2    wrong arguments
+
+EXAMPLES
+    cn-venv
+    UV_OFFLINE=1 cn-venv
+    cn-venv && bash scripts/check.sh
+
+SEE ALSO
+    cn-warm(1), cn-doctor(1), cn-sandbox(1)
 EOF
     ;;
     cn-wait) cat <<'EOF'
@@ -523,6 +588,62 @@ EXAMPLES
 
 SEE ALSO
     cn-call(1), cn-setup(1)
+EOF
+    ;;
+    cn-warm) cat <<'EOF'
+NAME
+    cn-warm - fill the uv cache with the agent templates' dependencies
+
+SYNOPSIS
+    cn-warm
+    cn-warm -h | --help
+
+DESCRIPTION
+    Downloads the dependencies of the newest published version of each
+    CodeNOW agent template (LangChain and Google ADK) into the uv cache,
+    so cn-venv of a new agent takes seconds and works offline. For each
+    template repository it takes the highest tag <name>-v<x.y.z> (else
+    the default branch), clones it (depth 1) into a temporary folder,
+    installs its requirements.txt into a throwaway environment with uv
+    and the indexes of your pip.conf, deletes the environment and checks
+    that the same pins install again with UV_OFFLINE=1. It prints the
+    time per template and the cache size. The credentials in pip.conf
+    are never printed or written to a file. Run it again after a new
+    template version.
+
+OPTIONS
+    -h, --help
+        Print this help and exit.
+
+ENVIRONMENT
+    CN_WARM_REPOS   the template repositories, separated by spaces or
+                    lines; <url>#<tag or branch> picks a ref. Default:
+                    gitlab.cloud.codenow.com/codenow-dev/demo-tenant/
+                    codenow-langchain-agent-sdk and
+                    demo-tenant-adk-based-agent
+    CN_WARM_PYTHON  the Python version (default 3.12)
+    UV_CACHE_DIR    uv's cache (default ~/.cache/uv)
+    UV_EXTRA_INDEX_URL, UV_INDEX_STRATEGY, UV_LINK_MODE,
+    UV_PYTHON_PREFERENCE
+                    as for cn-venv(1)
+
+FILES
+    ~/.cache/uv     the uv cache (uv cache dir)
+    ~/.pip/pip.conf, ~/.config/pip/pip.conf
+                    the indexes (read, never changed)
+
+EXIT STATUS
+    0    every template cached and installable offline
+    1    uv or git missing, or a template could not be cloned or
+         installed (the last lines, credentials masked)
+    2    wrong arguments
+
+EXAMPLES
+    cn-warm
+    CN_WARM_REPOS="https://git.example/acme/agent.git#v2.0.0" cn-warm
+
+SEE ALSO
+    cn-venv(1), cn-setup(1), cn-doctor(1)
 EOF
     ;;
   esac
