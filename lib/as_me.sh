@@ -106,9 +106,16 @@ asme_newest_sdk() {
 }
 
 # asme_pin_check <repo>: the agent's SDK pin must be ASME_SDK_MIN or newer; raised only with the developer's consent.
+# An agent of the Google ADK template (google-adk pinned, no codenow-agent-sdk pin) has its own developer identity
+# (ADK template 1.1.0): nothing to check.
 asme_pin_check() {
   local req="$1/requirements.txt" pin newest
   [ -f "$req" ] || { say "no requirements.txt: cannot check the $ASME_SDK version"; return 0; }
+  if grep -qE '^[[:space:]]*google-adk(\[[^]]*\])?[[:space:]]*==' "$req" \
+     && ! grep -qE "^[[:space:]]*$ASME_SDK[[:space:]]*==" "$req"; then
+    say "ADK agent: SDK pin check not needed"
+    return 0
+  fi
   pin="$(sed -n "s/^$ASME_SDK==\([0-9][0-9.]*\)[[:space:]]*\$/\1/p" "$req" | head -n 1)"
   if [ -z "$pin" ]; then say "requirements.txt has no $ASME_SDK==X.Y.Z pin: not checked"; return 0; fi
   if [ "$(printf '%s\n%s\n' "$ASME_SDK_MIN" "$pin" | sort -V | head -n 1)" = "$ASME_SDK_MIN" ]; then return 0; fi
