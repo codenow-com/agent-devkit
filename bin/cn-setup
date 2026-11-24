@@ -81,6 +81,9 @@ if have openspec; then
 elif have npm; then note "openspec is missing (every agent change goes through OpenSpec):  $(install_hint openspec)"
 else note "openspec is missing and needs Node.js:  $(install_hint node), then  $(install_hint openspec)"; fi
 have conda && say "found conda" || say "not found: conda (optional; a .venv works too)"
+# oidc-agent: a local agent under the developer's own identity (cn-sandbox token); optional.
+. "$DEVKIT_DIR/lib/sandbox_token.sh"
+oidc_check || problems=$((problems + 1))
 for tool in claude codex copilot; do
   if have "$tool"; then say "found $tool"; else say "not found: $tool (optional):  $(install_hint "$tool")"; fi
 done

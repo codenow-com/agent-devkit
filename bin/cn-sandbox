@@ -3,8 +3,64 @@
 # sandbox always matches the agent's template version).
 #
 #   cn-sandbox up | run <pipeline> [subject] [json] | logs | events | status | down
+#   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
+#   cn-sandbox token --watch    the same every 45 s until stopped
+#   cn-sandbox token --stop     stop the background refresh that `up` started
+#
+# With CN_IDENTITY_PROVIDER=developer (in the environment or the agent's .env) the agent runs under your own identity:
+# `up` writes the token and starts `token --watch` in the background, `down` stops it. Settings: CN_OIDC_ACCOUNT (the
+# oidc-agent account, default cn-agw), CN_IDENTITY_TOKEN_FILE (default ~/.codenow/sandbox-token/token). Every other
+# `token ...` (e.g. `token person <name>`) goes to the agent's sandbox.sh.
 set -euo pipefail
-root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "cn-sandbox: not inside a git repository" >&2; exit 1; }
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+self="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
+lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
+. "$lib/common.sh"
+. "$lib/sandbox_token.sh"
+CN_CMD=cn-sandbox
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+env_file=""
+[ -z "$root" ] || env_file="$root/.env"
+
+# developer_mode: CN_IDENTITY_PROVIDER=developer in the environment or in the agent's .env.
+developer_mode() {
+  local value="${CN_IDENTITY_PROVIDER:-}"
+  if [ -z "$value" ] && [ -n "$env_file" ] && [ -f "$env_file" ]; then
+    value="$(sed -n 's/^CN_IDENTITY_PROVIDER=//p' "$env_file" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+  fi
+  [ "$value" = developer ]
+}
+
+if [ "${1:-}" = token ]; then
+  case "${2:-}" in
+    "")
+      file="$(token_file_path "$env_file")"
+      token_write "$file" || exit 1
+      say "token of $(token_account) written to $file (valid at least ${TOKEN_SECONDS} s; keep it fresh with: cn-sandbox token --watch)"
+      exit 0 ;;
+    --watch) token_watch "$(token_file_path "$env_file")" ;;
+    --stop) watch_stop "$(token_file_path "$env_file")"; exit 0 ;;
+  esac
+fi
+
+[ -n "$root" ] || { echo "cn-sandbox: not inside a git repository" >&2; exit 1; }
 [ -f "$root/sandbox/sandbox.sh" ] || { echo "cn-sandbox: $root has no sandbox/sandbox.sh (an agent from the CodeNOW Agent SDK template 1.1.0 or newer has one)" >&2; exit 1; }
 cd "$root"
-exec bash sandbox/sandbox.sh "$@"
+case "${1:-}" in
+  up)
+    if developer_mode; then
+      file="$(token_file_path "$env_file")"
+      token_write "$file" || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
+      export CN_IDENTITY_TOKEN_FILE="$file"   # the sandbox copies the token from here
+      watch_start "$file" "$self"
+    fi
+    exec bash sandbox/sandbox.sh "$@" ;;
+  down)
+    rc=0; bash sandbox/sandbox.sh "$@" || rc=$?
+    file="$(token_file_path "$env_file")"
+    if watch_alive "$file" >/dev/null; then watch_stop "$file"; fi
+    exit "$rc" ;;
+  *) exec bash sandbox/sandbox.sh "$@" ;;
+esac

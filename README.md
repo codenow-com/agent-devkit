@@ -28,7 +28,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. |
 | `cn-doctor` | Reports what is there and what is missing. Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
-| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. |
+| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. `cn-sandbox token [--watch]` writes your own access token for a local agent under your identity (below). |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
@@ -52,6 +52,38 @@ Exit codes of `cn-wait` and `cn-call`:
    check of the deployed agent's A2A card.
 4. Develop on short-lived branches `feature/<name>/...`: the sandbox for seconds-long loops, a push for a preview in
    your personal-dev environment, a merge to `main` for a release to shared dev.
+
+## Run a local agent under your own identity
+
+A local agent can run as you, with your own Keycloak access token, instead of a deployed agent's token. The agent then
+calls the AI gateway and Workforce as you; Workforce shows it as `--under-development-- <agent>`, owned by you, under
+your person in the org chart. Your person must be in the organisation, else Workforce refuses the agent.
+
+1. Install oidc-agent 5.2.0 or newer (`cn-doctor` checks it) and create the account `cn-agw` once with the device
+   flow, as the agent gateway's client setup describes (`oidc-gen cn-agw --flow=device ...`). After a reboot, load it
+   with `oidc-add cn-agw`.
+2. In the agent's `.env`:
+
+   ```bash
+   CN_IDENTITY_PROVIDER=developer
+   CN_IDENTITY_TOKEN_FILE=~/.codenow/sandbox-token/token
+   CN_IDENTITY_DEVELOPER_CLIENTS=<client id of the cn-agw account>
+   WORKFORCE_URL=https://<observer host>
+   ```
+
+   Leave `AI_GATEWAY_REFRESH_TOKEN` empty: the agent refuses to start as you next to a deployed agent's token.
+3. `cn-sandbox up`. It writes the token (`oidc-token --time=120 cn-agw`) to the token file and starts
+   `cn-sandbox token --watch` in the background, which writes a fresh one every 45 s (pid and log in the token's
+   folder). `cn-sandbox down` stops it. Without the sandbox: `cn-sandbox token` once, or `cn-sandbox token --watch` in a
+   terminal of its own; `cn-sandbox token --stop` stops a background refresh.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CN_OIDC_ACCOUNT` | `cn-agw` | the oidc-agent account the token comes from |
+| `CN_IDENTITY_TOKEN_FILE` | `~/.codenow/sandbox-token/token` | the token file (mode 600, its folder 700); never in a repository or directly in your home folder |
+| `CN_SANDBOX_TOKEN_INTERVAL` | `45` | seconds between two refreshes of `--watch` |
+
+The token is a secret: it is never printed, and the sandbox mounts only its own copy of it.
 
 ## Settings and secrets
 

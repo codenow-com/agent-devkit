@@ -52,6 +52,7 @@ install_hint() {
       copilot) echo "npm install -g @github/copilot" ;;
       node) echo "brew install node" ;;
       openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
+      oidc-agent) echo "brew tap indigo-dc/oidc-agent && brew install oidc-agent" ;;
       *) echo "brew install $1" ;;
     esac
   else
@@ -66,6 +67,7 @@ install_hint() {
       copilot) echo "npm install -g @github/copilot  (needs Node.js 22+)" ;;
       node) echo "Node.js 22 LTS: https://nodejs.org/en/download (or nvm install 22)" ;;
       openspec) echo "npm install -g @fission-ai/openspec@latest  (needs Node.js 22.12+)" ;;
+      oidc-agent) echo "oidc-agent 5.2+ from http://repo.data.kit.edu (Debian and Ubuntu ship an older one)" ;;
       *) echo "sudo apt-get install -y $1" ;;
     esac
   fi
