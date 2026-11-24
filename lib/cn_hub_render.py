@@ -131,7 +131,7 @@ def token_text(sb: dict) -> str:
     if refresh.get("token_age_s") is not None:
         text += f", token written {refresh['token_age_s']} s ago"
     if refresh.get("registry") is not None:
-        text += f", {refresh['registry']} sandbox(es) use it"
+        text += f", used by {refresh['registry']} sandbox(es)" + ("" if refresh.get("uses_it") else ", not this one")
     return text
 
 

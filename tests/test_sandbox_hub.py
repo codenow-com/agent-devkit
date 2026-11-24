@@ -124,6 +124,17 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(gamma["console"]["port"], 8083)   # from the edge's port binding, kept while stopped
         self.assertEqual(gamma["identity"]["mode"], "unknown")
 
+    def test_the_shared_refresh_list_of_devkit_0_1_13(self):
+        users = self.home / "sandbox-token" / "users"
+        users.mkdir(parents=True)
+        (users / "alpha").write_text(f"{self.tmp / 'alpha'}\nsandbox-alpha\n")
+        data = {sb["name"]: sb for sb in cn_hub.collect(self.docker, self.home)}
+        self.assertEqual(data["alpha"]["token_refresh"]["registry"], 1)
+        self.assertTrue(data["alpha"]["token_refresh"]["uses_it"])
+        self.assertFalse(data["beta"]["token_refresh"]["uses_it"])
+        self.assertNotIn("projects", data["alpha"]["token_refresh"])
+        self.assertIn("used by 1 sandbox(es)", cn_hub_render.card(data["alpha"], False))
+
     def test_no_token_or_secret_in_the_json_or_the_page(self):
         sandboxes = list(self.data.values())
         for text in (json.dumps(sandboxes), cn_hub_render.page(sandboxes)):

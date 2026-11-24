@@ -183,7 +183,7 @@ def workforce_of(log: str, env: dict) -> dict:
 def token_refresh(home: pathlib.Path) -> dict:
     """The devkit's background refresh: is watch.pid alive, how old is the token file (its time, never its content)."""
     folder = home / "sandbox-token"
-    info = {"watch_running": False, "watch_pid": None, "token_age_s": None, "registry": None}
+    info = {"watch_running": False, "watch_pid": None, "token_age_s": None, "registry": None, "projects": []}
     try:
         pid = int((folder / "watch.pid").read_text().strip())
         os.kill(pid, 0)
@@ -197,9 +197,17 @@ def token_refresh(home: pathlib.Path) -> dict:
         info["token_age_s"] = int(time.time() - (folder / "token").stat().st_mtime)
     except OSError:
         pass
-    registry = folder / "users"   # devkit 0.1.13+: one entry per sandbox that uses the refresh
+    registry = folder / "users"   # devkit 0.1.13+: one file per sandbox that uses the refresh (repository, project)
     if registry.is_dir():
-        info["registry"] = len([p for p in registry.iterdir() if not p.name.startswith(".")])
+        entries = [p for p in registry.iterdir() if p.is_file() and not p.name.startswith(".")]
+        info["registry"] = len(entries)
+        for entry in entries:
+            try:
+                lines = entry.read_text(errors="replace").splitlines()
+            except OSError:
+                continue
+            if len(lines) > 1 and lines[1].strip():
+                info["projects"].append(lines[1].strip())
     return info
 
 
@@ -278,7 +286,8 @@ def one_sandbox(project: str, containers: list, docker, refresh: dict) -> dict:
         "identity": identity_of(log, env),
         "workforce": workforce,
         "egress": [{"host": h, "kind": host_kind(h, workforce["url_host"] or "")} for h in allow],
-        "token_refresh": refresh,
+        "token_refresh": {**{k: v for k, v in refresh.items() if k != "projects"},
+                          "uses_it": project in refresh.get("projects", [])},
         "sdk_version": sdk_version(repo) if working_dir else None,
         "env": {k: env[k] for k in ENV_KEYS if k in env and k != "CN_IDENTITY_DEVELOPER_CLIENTS"}
         | ({"CN_IDENTITY_DEVELOPER_CLIENTS": "set"} if env.get("CN_IDENTITY_DEVELOPER_CLIENTS") else {}),
