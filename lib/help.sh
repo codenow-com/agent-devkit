@@ -198,16 +198,26 @@ DESCRIPTION
     `bash sandbox/sandbox.sh help' there.
 
 OPTIONS
-    up       Start the sandbox. In developer mode it first writes your
-             token and starts `token --watch' in the background.
+    up       Start the sandbox. In developer mode (CN_IDENTITY_PROVIDER=
+             developer, e.g. the block of `up --as-me' in .env) it first
+             writes your token and starts `token --watch' in the
+             background. Then it prints the console URL on localhost: the
+             login returns to localhost, so a login started on 127.0.0.1
+             fails.
     up --as-me
              Run the agent as yourself: check that requirements.txt pins
              codenow-agent-sdk 2.24.0 or newer (an older pin: ask to raise
              that line), write the developer identity block into the
              agent's .env (client and Workforce URL from cn-setup
              --only-gateway, WORKFORCE_MODE=shadow), then `up'. Other
-             lines of .env stay; a key of the block set outside it with
-             another value stops it.
+             lines of .env stay. An empty KEY= line of a key of the block
+             outside it is removed (each removed line is named); a
+             non-empty other value stops it.
+    status   Print the identity the running agent uses (from its log):
+             developer (tenant, client), deployment token, or unknown
+             (agent not running); its last Workforce onboarding line; and
+             the console URL. Then the status of the agent's sandbox.sh.
+             Never prints a token.
     as-me off
              Remove the block from .env and stop the token refresh.
     as-me status
@@ -255,6 +265,7 @@ EXIT STATUS
 EXAMPLES
     cn-sandbox up
     cn-sandbox up --as-me
+    cn-sandbox status
     cn-sandbox as-me off
     cn-sandbox run <pipeline>
     cn-sandbox token --watch

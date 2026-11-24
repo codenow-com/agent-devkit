@@ -24,8 +24,9 @@ asme_lines() {
 }
 
 # asme_edit <env file> write|remove|conflicts [lines]: one Python helper for the three file operations.
-#   conflicts  prints "line N: KEY=value" for each of the block's keys outside the block with another value
-#   write      replaces the block (or appends it) with the lines on stdin; the file keeps its mode (new: 600)
+#   conflicts  prints "line N: KEY=value" for each of the block's keys outside the block with another, non-empty value
+#   write      replaces the block (or appends it) with the lines on stdin and deletes the empty `KEY=` lines of the
+#              block's keys outside it (prints "removed line N: KEY=" for each); the file keeps its mode (new: 600)
 #   remove     deletes the block; prints "removed" when there was one
 ASME_PY="$(cat <<'PY'
 import os, sys, tempfile
@@ -46,25 +47,37 @@ for n, line in enumerate(lines):
         outside.append((n + 1, line))
 if start is not None and stop is None:
     sys.exit(f"{path}: the line '{begin}' has no closing '{end}': fix the file by hand")
+want = dict(l.split("=", 1) for l in wanted)
+def setting(line):  # (key, value) of a KEY=value line of a key of the block, else None
+    text = line.strip()
+    if text.startswith("export "):
+        text = text[7:].lstrip()
+    key, sep, value = text.partition("=")
+    return (key.strip(), value.strip()) if sep and key.strip() in want else None
+def empty(value):  # only whitespace after the = sign, or an empty quoted string
+    return value in ("", '""', "''")
 if action == "conflicts":
-    want = dict(l.split("=", 1) for l in wanted)
     for n, line in outside:
-        text = line.strip()
-        if text.startswith("export "):
-            text = text[7:].lstrip()
-        key, sep, value = text.partition("=")
-        if sep and key.strip() in want:
-            value = value.strip().strip('"').strip("'")
-            if value != want[key.strip()]:
-                print(f"line {n}: {line}")
+        found = setting(line)
+        if found and not empty(found[1]) and found[1].strip('"').strip("'") != want[found[0]]:
+            print(f"line {n}: {line}")
     sys.exit(0)
+dropped = set()
+if action == "write":
+    for n, line in outside:
+        found = setting(line)
+        if found and empty(found[1]):
+            dropped.add(n - 1)
+            print(f"removed line {n}: {line.strip()}")
 if action == "remove" and start is None:
     sys.exit(0)
 block = [begin, *wanted, end] if action == "write" else []
 if start is None:
-    new = lines + ([""] if lines and lines[-1].strip() else []) + block
+    kept = [l for n, l in enumerate(lines) if n not in dropped]
+    new = kept + ([""] if kept and kept[-1].strip() else []) + block
 else:
-    new = lines[:start] + block + lines[stop + 1:]
+    keep = lambda a, b: [lines[n] for n in range(a, b) if n not in dropped]
+    new = keep(0, start) + block + keep(stop + 1, len(lines))
     if action == "remove" and start > 0 and not lines[start - 1].strip() and (stop + 1 >= len(lines)):
         new = lines[:start - 1]
 mode = os.stat(path).st_mode & 0o777 if os.path.exists(path) else 0o600
@@ -120,7 +133,7 @@ PY
 
 # asme_on <repo> <env file>: the pin check, then the block (conflicts stop it).
 asme_on() {
-  local repo="$1" env="$2" lines conflicts
+  local repo="$1" env="$2" lines conflicts removed
   asme_pin_check "$repo"
   lines="$(asme_lines)" || exit 1
   conflicts="$(printf '%s\n' "$lines" | asme_edit "$env" conflicts)" || die "cannot read $env"
@@ -129,7 +142,8 @@ asme_on() {
     printf '%s\n' "$conflicts" | sed "s/^/${CN_CMD:-cn}:   /" >&2
     die "remove these lines from $env (cn-sandbox up --as-me writes the values), then run again"
   fi
-  printf '%s\n' "$lines" | asme_edit "$env" write || die "could not write $env"
+  removed="$(printf '%s\n' "$lines" | asme_edit "$env" write)" || die "could not write $env"
+  [ -z "$removed" ] || printf '%s\n' "$removed" | sed "s/^/${CN_CMD:-cn}: $(basename "$env"): empty setting outside the block, /"
   say "$env: developer identity block written (client $CODENOW_AGW_CLIENT_ID)"
   if [ -n "${CODENOW_WORKFORCE_URL:-}" ]; then
     say "Workforce: $CODENOW_WORKFORCE_URL (shadow); you see the agent under you as --under-development-- <agent>"
@@ -154,4 +168,55 @@ asme_status() {
     say "${env:-.env} has no developer identity block (cn-sandbox up --as-me writes it)"
   fi
   say "stored (~/.codenow/config): client ${CODENOW_AGW_CLIENT_ID:-<not set>}, Workforce ${CODENOW_WORKFORCE_URL:-<not set>}"
+}
+
+# asme_env_value <env file> <KEY>: the last value of KEY in the file, without surrounding quotes; empty when missing.
+asme_env_value() {
+  [ -f "$1" ] || return 0
+  sed -n "s/^$2=//p" "$1" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+
+# asme_project <repo>: the compose project of the agent's sandbox (the same rule as its sandbox.sh).
+asme_project() { printf 'sandbox-%s' "$(basename "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')"; }
+
+# asme_console <repo>: the console URL. The login returns to localhost and its state cookie is per host, so a login
+# started on 127.0.0.1 fails ("Login expired or invalid").
+asme_console() {
+  local port="${SANDBOX_PORT:-}"
+  [ -n "$port" ] || port="$(cat "$1/sandbox/.run/port" 2>/dev/null || true)"
+  printf 'http://localhost:%s/' "${port:-8080}"
+}
+
+# asme_identity <repo> <env file>: the identity the running agent uses (the last "identity: adapter" line of its log)
+# and its last Workforce onboarding line. Never prints a token.
+asme_identity() {
+  local repo="$1" env="$2" id="" log adapter client tenant workforce block=""
+  if have docker; then
+    id="$(docker ps -q --filter "label=com.docker.compose.project=$(asme_project "$repo")" \
+      --filter label=com.docker.compose.service=agent 2>/dev/null | head -n 1 || true)"
+  fi
+  if [ -z "$id" ]; then say "identity: unknown (agent not running)"; return 0; fi
+  log="$(docker logs "$id" 2>&1 | sed -E 's/eyJ[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]*)*/<token>/g' || true)"
+  adapter="$(printf '%s\n' "$log" | sed -n 's/.*identity: adapter \([A-Za-z0-9_.-]*\).*/\1/p' | tail -n 1 || true)"
+  if [ -f "$env" ] && grep -qxF "$ASME_BEGIN" "$env"; then block=1; fi
+  case "$adapter" in
+    developer)
+      client="$(asme_env_value "$env" CN_IDENTITY_DEVELOPER_CLIENTS)"
+      [ -n "$client" ] || client="${CODENOW_AGW_CLIENT_ID:-<not set>}"
+      tenant="$(gw_tenant)"
+      [ -z "$tenant" ] || tenant="$tenant, "
+      say "identity: developer (${tenant}client $client)" ;;
+    legacy-refresh-token)
+      if [ -n "$block" ]; then
+        say "identity: deployment token (legacy-refresh-token); .env has the developer block: run cn-sandbox up"
+      else
+        say "identity: deployment token (legacy-refresh-token); run cn-sandbox up --as-me to run as yourself"
+      fi ;;
+    "") say "identity: unknown (no identity line in the agent log yet)" ;;
+    *) say "identity: adapter $adapter" ;;
+  esac
+  workforce="$(printf '%s\n' "$log" | grep -E 'Workforce: (onboarding|declaration) ' | tail -n 1 \
+    | sed 's/.*Workforce: /Workforce: /' || true)"
+  [ -z "$workforce" ] || say "$workforce"
+  say "console: $(asme_console "$repo") (log in on localhost, not on 127.0.0.1)"
 }

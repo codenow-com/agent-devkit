@@ -3,6 +3,7 @@
 # sandbox always matches the agent's template version).
 #
 #   cn-sandbox up | run <pipeline> [subject] [json] | logs | events | status | down
+#   cn-sandbox status           the agent's identity, Workforce onboarding and console URL, then sandbox.sh status
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
 #   cn-sandbox token --stop     stop the background refresh that `up` started
@@ -85,6 +86,12 @@ case "${1:-}" in
       export CN_IDENTITY_TOKEN_FILE="$file"   # the sandbox copies the token from here
       watch_start "$file" "$self"
     fi
+    rc=0; bash sandbox/sandbox.sh "$@" || rc=$?
+    [ "$rc" != 0 ] || say "console: $(asme_console "$root") (log in on localhost, not on 127.0.0.1)"
+    exit "$rc" ;;
+  status)
+    load_config
+    asme_identity "$root" "$env_file"
     exec bash sandbox/sandbox.sh "$@" ;;
   down)
     rc=0; bash sandbox/sandbox.sh "$@" || rc=$?

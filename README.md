@@ -28,7 +28,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
-| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
+| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`. `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
@@ -110,8 +110,9 @@ your person in the org chart. Your person must be in the organisation, else Work
    # <<< cn-devkit
    ```
 
-   Other lines of `.env` stay. A second run refreshes the block. When one of these keys is set outside the block with
-   another value, it stops and names the line to remove. Without a Workforce URL the two `WORKFORCE_*` lines are left
+   Other lines of `.env` stay. A second run refreshes the block. An empty line of one of these keys outside the block
+   (`WORKFORCE_URL=`, as in a template's `.env`) is removed, and the output names it. When one of these keys is set
+   outside the block with another value, it stops and names the line to remove. Without a Workforce URL the two `WORKFORCE_*` lines are left
    out and the agent does not appear in Workforce. Leave `AI_GATEWAY_REFRESH_TOKEN` empty: the agent refuses to start
    as you next to a deployed agent's token.
 3. `cn-sandbox up` (also the second half of `up --as-me`) writes the token (`oidc-token --time=120 cn-agw`) to the
@@ -120,7 +121,28 @@ your person in the org chart. Your person must be in the organisation, else Work
    `cn-sandbox token --watch` in a terminal of its own; `cn-sandbox token --stop` stops a background refresh.
 
 `cn-sandbox as-me status` shows the block and the stored values; `cn-sandbox as-me off` removes the block and stops
-the token refresh. You can also write the four lines into `.env` by hand; `cn-sandbox up` then works the same.
+the token refresh. You can also write the four lines into `.env` by hand; `cn-sandbox up` then works the same. While
+the block is in `.env`, a plain `cn-sandbox up` also runs the agent as you.
+
+`cn-sandbox status` first says under which identity the running agent runs (from the agent's log), then shows the
+status of the agent's `sandbox.sh`:
+
+```text
+cn-sandbox: identity: developer (demo-tenant, client demo-tenant-demo-environment-agent-gateway)
+cn-sandbox: Workforce: onboarding approved (instance dev-..., mode shadow)
+cn-sandbox: console: http://localhost:8080/ (log in on localhost, not on 127.0.0.1)
+```
+
+The other cases are `identity: deployment token (legacy-refresh-token); run cn-sandbox up --as-me to run as yourself`
+and `identity: unknown (agent not running)`.
+
+Open the console on `http://localhost:<port>/`, as `cn-sandbox up` and `status` print it. The login returns to
+`localhost`, and its state cookie belongs to one host name.
+
+| Symptom | Fix |
+|---|---|
+| Console: `Login expired or invalid` | You started the login on `127.0.0.1`. Use `localhost` and start again at `http://localhost:<port>/auth/login`. |
+| `up --as-me` stops on a line of `.env` | That line sets a key of the block to another value: remove it, then run again. |
 
 | Setting | Default | Meaning |
 |---|---|---|

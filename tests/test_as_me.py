@@ -30,6 +30,24 @@ exec "$REAL_PYTHON" "$@"
 SANDBOX_STUB = """#!/usr/bin/env bash
 echo "sandbox.sh $* file=${CN_IDENTITY_TOKEN_FILE:-}" >> "$FAKE_STATE/sandbox.log"
 """
+# docker ps -q --filter label=...project=<p> --filter label=...service=agent: the id when $FAKE_STATE/agent.log exists
+# and the project is the one of the repository "agent"; docker logs <id>: that log.
+FAKE_DOCKER = """#!/usr/bin/env bash
+echo "docker $*" >> "$FAKE_STATE/docker.log"
+case "$1" in
+  ps) [ -f "$FAKE_STATE/agent.log" ] && case "$*" in
+        *com.docker.compose.project=sandbox-agent\\ *com.docker.compose.service=agent*) echo c0ffee ;; esac
+      exit 0 ;;
+  logs) [ "$2" = c0ffee ] && cat "$FAKE_STATE/agent.log"; exit 0 ;;
+esac
+exit 0
+"""
+DEV_LOG = """INFO codenow_agent_sdk.agent.identity_provider: identity: adapter developer
+INFO codenow_agent_sdk.workforce.onboarding: Workforce: onboarding pending (instance -, mode shadow)
+INFO codenow_agent_sdk.workforce.onboarding: Workforce: onboarding approved (instance dev-a1b2, mode shadow)
+INFO token eyJhbGciOiJSUzI1NiJ9.eyJuIjoxfQ.SECRETSIG
+"""
+LEGACY_LOG = "INFO codenow_agent_sdk.agent.identity_provider: identity: adapter legacy-refresh-token\n"
 
 
 def write_exe(path, text):
@@ -46,8 +64,10 @@ class AsMeTest(unittest.TestCase):
         write_exe(self.bin / "oidc-token", FAKE_TOKEN)
         real = subprocess.run(["bash", "-c", "command -v python3"], capture_output=True, text=True).stdout.strip()
         write_exe(self.bin / "python3", FAKE_PYTHON)
+        write_exe(self.bin / "docker", FAKE_DOCKER)
         (self.home / ".codenow").mkdir()
-        self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_WORKFORCE_URL={OBSERVER}\n")
+        self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_WORKFORCE_URL={OBSERVER}\n"
+                      "CODENOW_MCP_URL=https://mcp-server-demotenant.example.com/mcp\n")
         self.env = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
                     "FAKE_STATE": str(self.state), "REAL_PYTHON": real, "CN_SANDBOX_TOKEN_INTERVAL": "30"}
         self.repo = self.tmp / "agent"
@@ -126,6 +146,99 @@ class AsMeTest(unittest.TestCase):
         self.assertNotIn("line 3", out.stderr)                 # the same value is no conflict
         self.assertNotIn(BEGIN, self.env_file())
         self.assertFalse((self.state / "sandbox.log").exists())
+
+    def test_an_empty_line_of_a_block_key_is_removed_and_named(self):
+        self.env_file("A=1\nWORKFORCE_URL=\nexport CN_IDENTITY_PROVIDER=  \nWORKFORCE_MODE=shadow\nB=2\n")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("removed line 2: WORKFORCE_URL=", out.stdout)
+        self.assertIn("removed line 3: export CN_IDENTITY_PROVIDER=", out.stdout)
+        self.assertNotIn("removed line 4", out.stdout)          # a same, non-empty value stays
+        expected = "A=1\nWORKFORCE_MODE=shadow\nB=2\n\n" + self.block(
+            "CN_IDENTITY_PROVIDER=developer", f"CN_IDENTITY_DEVELOPER_CLIENTS={CLIENT}",
+            f"WORKFORCE_URL={OBSERVER}", "WORKFORCE_MODE=shadow")
+        self.assertEqual(self.env_file(), expected)
+        self.assertIn("sandbox.sh up file=", (self.state / "sandbox.log").read_text())
+
+    def test_an_empty_line_after_an_existing_block_is_removed_too(self):
+        self.env_file(self.block("CN_IDENTITY_PROVIDER=developer", f"CN_IDENTITY_DEVELOPER_CLIENTS={CLIENT}")
+                      + "WORKFORCE_URL=\n")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("removed line 5: WORKFORCE_URL=", out.stdout)
+        self.assertTrue(self.env_file().endswith(END + "\n"))
+
+    def test_an_empty_line_and_a_conflict_stop_without_a_change(self):
+        original = "WORKFORCE_URL=\nWORKFORCE_MODE=enforce\n"
+        self.env_file(original)
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("line 2: WORKFORCE_MODE=enforce", out.stderr)
+        self.assertNotIn("line 1", out.stderr)
+        self.assertEqual(self.env_file(), original)
+
+    def test_plain_up_with_the_block_keeps_developer_mode(self):
+        self.env_file("A=1\n")
+        self.assertEqual(self.run_cn("up", "--as-me").returncode, 0)
+        self.assertEqual(self.run_cn("down").returncode, 0)
+        (self.state / "sandbox.log").unlink()
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        log = (self.state / "sandbox.log").read_text()
+        self.assertIn("sandbox.sh up file=", log)
+        self.assertNotIn("file=\n", log)                     # the token file is passed: developer mode
+
+    def test_up_as_me_after_a_plain_up_and_down(self):
+        self.env_file("A=1\nWORKFORCE_URL=\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("sandbox.sh up file=\n", (self.state / "sandbox.log").read_text())   # deployment token
+        self.assertEqual(self.run_cn("down").returncode, 0)
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn(BEGIN, self.env_file())
+        self.assertNotIn("\nWORKFORCE_URL=\n", self.env_file())
+
+    def test_up_prints_the_console_on_localhost(self):
+        (self.repo / "sandbox" / ".run").mkdir()
+        (self.repo / "sandbox" / ".run" / "port").write_text("8083\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("console: http://localhost:8083/", out.stdout)
+        self.assertNotIn("http://127.0.0.1", out.stdout)
+
+    def test_status_developer(self):
+        self.env_file("A=1\n")
+        self.run_cn("up", "--as-me")
+        (self.state / "agent.log").write_text(DEV_LOG)
+        out = self.run_cn("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(f"cn-sandbox: identity: developer (demotenant, client {CLIENT})\n", out.stdout)
+        self.assertIn("cn-sandbox: Workforce: onboarding approved (instance dev-a1b2, mode shadow)\n", out.stdout)
+        self.assertIn("console: http://localhost:8080/", out.stdout)
+        self.assertNotIn("SECRETSIG", out.stdout + out.stderr)
+        self.assertNotIn("eyJ", out.stdout + out.stderr)
+        self.assertTrue((self.state / "sandbox.log").read_text().splitlines()[-1].startswith("sandbox.sh status"))
+
+    def test_status_deployment_token(self):
+        (self.state / "agent.log").write_text(LEGACY_LOG)
+        out = self.run_cn("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("identity: deployment token (legacy-refresh-token); run cn-sandbox up --as-me to run as "
+                      "yourself", out.stdout)
+        self.assertNotIn("Workforce:", out.stdout)
+
+    def test_status_agent_not_running(self):
+        out = self.run_cn("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("cn-sandbox: identity: unknown (agent not running)\n", out.stdout)
+        self.assertIn("sandbox.sh status", (self.state / "sandbox.log").read_text())
+
+    def test_status_a_refusal_is_shown(self):
+        (self.state / "agent.log").write_text(
+            "identity: adapter developer\nWARNING x: Workforce: onboarding refused (instance -, mode shadow)\n")
+        out = self.run_cn("status")
+        self.assertIn("cn-sandbox: Workforce: onboarding refused (instance -, mode shadow)\n", out.stdout)
 
     def test_a_missing_client_says_run_cn_setup(self):
         self.settings(f"CODENOW_WORKFORCE_URL={OBSERVER}\n")
