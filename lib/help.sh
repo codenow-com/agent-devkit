@@ -9,7 +9,7 @@ cn_usage_line() {
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot] [--here]" ;;
-    cn-sandbox) echo "usage: cn-sandbox up [--as-me|--deployment-token]|down|run|logs|events|status|token|as-me|hub" ;;
+    cn-sandbox) echo "usage: cn-sandbox up [--as-me|--deployment-token]|down|run|logs|events|status|token|as-me|forget|hub" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-venv) echo "usage: cn-venv [--python <version>]" ;;
@@ -223,7 +223,8 @@ NAME
 
 SYNOPSIS
     cn-sandbox up [--as-me | --deployment-token] | down | logs | events | status
-    cn-sandbox as-me off | on | status
+    cn-sandbox as-me off [--forget] | on | status
+    cn-sandbox forget [--yes] [--reason TEXT]
     cn-sandbox run <pipeline> [subject] [json]
     cn-sandbox token [--watch | --stop]
     cn-sandbox hub [--stop | --status]
@@ -283,10 +284,22 @@ OPTIONS
              Remove the block from .env, remember the choice there (a
              comment line), and stop the token refresh when no other
              sandbox uses it: every later `up' uses the deployment token.
+             Then it offers to remove your development instance from
+             Workforce (as `forget'); --forget does it without asking.
     as-me on
              Run as you again: remove that line and write the block.
     as-me status
              Show the block and the values stored by cn-setup.
+    forget   Remove your development instance of this agent from
+             Workforce: dev-<username>-<component>, shown there as
+             --under-development-- <component> (username: the
+             preferred_username of your token; component: agent_name in
+             agent-config/config.yaml, else the folder name). It asks
+             first; without a terminal it needs --yes. Workforce
+             offboards it (audited as you, with --reason TEXT if given);
+             only your own. The next `up' as you declares it again.
+             Workforce URL: CODENOW_WORKFORCE_URL, else WORKFORCE_URL of
+             .env. Never prints the token.
     down     Stop the sandbox, and the background token refresh when no
              other sandbox uses it.
     token    Write your own access token (oidc-agent) to the token file,
@@ -371,9 +384,10 @@ EXIT STATUS
     1    not in a git repository, no sandbox/sandbox.sh, or no token;
          up --as-me: no client, an old SDK pin, or a line in .env that
          conflicts with the block; hub: it did not start (port taken);
-         hub --status: not running
+         hub --status: not running; forget: no Workforce URL, no token,
+         no terminal without --yes, or Workforce refused (401, 403)
     2    wrong arguments (as-me without off or status, hub with another
-         option)
+         option, forget with another option)
     token --watch runs until it is stopped.
 
 EXAMPLES
@@ -381,6 +395,8 @@ EXAMPLES
     cn-sandbox up --as-me
     cn-sandbox status
     cn-sandbox as-me off
+    cn-sandbox forget
+    cn-sandbox forget --yes --reason "spike done"
     cn-sandbox run <pipeline>
     cn-sandbox token --watch
     cn-sandbox hub

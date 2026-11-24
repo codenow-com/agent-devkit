@@ -28,7 +28,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. With `CN_WORKSPACE=vscode` it opens VS Code at once instead (`--here`: this terminal). |
-| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
+| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token; `cn-sandbox forget` removes your development instance from Workforce. |
 | `cn-venv` | Creates (or updates) the `.venv` of the agent repository you are in and installs its `requirements.txt`: with uv in seconds, else `python3 -m venv` and pip. Never a conda environment. |
 | `cn-warm` | Downloads the dependencies of the newest published agent templates into the uv cache, so `cn-venv` of a new agent needs no download and works offline (below). |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
@@ -168,6 +168,16 @@ dev identity provider for the console login only, signed in as you. It prints
 `sandbox: agent not deployed yet: console login is local (dev IdP, as <you>); models and Workforce use your own token`;
 `cn-sandbox status` says `console login: local dev IdP (not deployed yet)` and the hub shows a `pre-deploy` chip. The
 next `up` after the first deployment uses the agent's own console client.
+
+### Remove your development instance from Workforce
+
+`cn-sandbox forget` removes your development instance of this agent from Workforce: `dev-<username>-<component>`,
+shown there as `--under-development-- <component>`. It finds the username in your token (`preferred_username`), the
+component in `agent-config/config.yaml` (`agent_name`), and the Workforce URL in `CODENOW_WORKFORCE_URL` (else
+`WORKFORCE_URL` in `.env`); it asks before it calls Workforce (`--yes` without a terminal, `--reason TEXT` for the
+audit). Workforce offboards only your own development instance; the next `cn-sandbox up` as you declares it again.
+`cn-sandbox as-me off` offers the same (`--forget` does it without asking). Without a heartbeat Workforce hides a
+development instance after 7 days and offboards it after 30 days by itself.
 
 ### Several agents at once
 

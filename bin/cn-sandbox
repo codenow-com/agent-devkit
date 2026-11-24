@@ -14,6 +14,7 @@
 #   cn-sandbox up --as-me       the same, and clears `as-me off` (stops when the identity is not ready)
 #   cn-sandbox up --deployment-token   this run only on the deployment's token; the next `up` runs as you again
 #   cn-sandbox as-me off|on|status     the deployment token from now on (remembered in .env) | as you again | show it
+#   cn-sandbox forget [--yes] [--reason TEXT]   remove your development instance of this agent from Workforce
 #   cn-sandbox hub [--stop|--status]  the page with every sandbox on this computer (http://localhost:8079/)
 #
 # With CN_IDENTITY_PROVIDER=developer (in the environment or the agent's .env) the agent runs under your own identity:
@@ -33,6 +34,7 @@ lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
 . "$lib/gateway_setup.sh"   # interactive, ask_yes
 . "$lib/as_me.sh"
 . "$lib/sandbox_hub.sh"
+. "$lib/sandbox_forget.sh"
 CN_CMD=cn-sandbox
 note() { say "$*"; }
 
@@ -71,14 +73,38 @@ if [ "${1:-}" = hub ]; then
 fi
 
 [ -n "$root" ] || { echo "cn-sandbox: not inside a git repository" >&2; exit 1; }
+if [ "${1:-}" = forget ]; then
+  shift
+  yes=0; reason=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --yes|-y) yes=1 ;;
+      --reason) [ "$#" -ge 2 ] || cn_usage_error cn-sandbox "--reason needs a text"; reason="$2"; shift ;;
+      --reason=*) reason="${1#--reason=}" ;;
+      *) cn_usage_error cn-sandbox "forget takes --yes and --reason TEXT" ;;
+    esac
+    shift
+  done
+  load_config
+  forget_run "$root" "$env_file" "$yes" "$reason"
+  exit 0
+fi
 if [ "${1:-}" = as-me ]; then
   load_config
   case "${2:-}" in
     off)
+      case "${3:-}" in ""|--forget) ;; *) cn_usage_error cn-sandbox "as-me off takes only --forget" ;; esac
+      forget_from="$(forget_url "$env_file")"   # before the block (and its WORKFORCE_URL) goes
       asme_off "$env_file"
       asme_mark_off "$env_file"
       say "from now on cn-sandbox up uses the deployment token in this repository (cn-sandbox as-me on: as you again)"
       token_share_stop "$(token_file_path "$env_file")" "$root"
+      # Also offer to remove the development instance from Workforce: --forget, or a yes on a terminal.
+      if [ -n "$forget_from" ] && { [ "${3:-}" = --forget ] \
+          || ask_yes "Also remove your development instance from Workforce?"; }; then
+        ( CODENOW_WORKFORCE_URL="$forget_from" forget_run "$root" "$env_file" 1 "" ) \
+          || say "the development instance stays in Workforce (cn-sandbox forget tries again)"
+      fi
       exit 0 ;;
     on)
       asme_mark_on "$env_file"
