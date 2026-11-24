@@ -1,6 +1,6 @@
 ---
 name: codenow-new-agent
-description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, pick the template (CodeNOW Agent SDK on LangChain, or Google ADK over A2A), create the agent from its newest version through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue with the agent repository's own start skill in this terminal session or in VS Code (asked once, stored as CN_WORKSPACE). Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
+description: Create a new AI agent in CodeNOW from the user's coding assistant — first settle where the user works (in this terminal, or in VS Code: a terminal assistant then opens VS Code at once and stops; inside VS Code no question is asked; stored as CN_WORKSPACE), then ask what the agent does, pick or create its agent swarm, pick the template (CodeNOW Agent SDK on LangChain, or Google ADK over A2A), create the agent from its newest version through the CodeNOW MCP server, wait until it is ready, clone its repository and continue with the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
 ---
 
 # Create a new CodeNOW agent
@@ -13,6 +13,39 @@ If the client cannot ask the user (an autonomous mode, for example VS Code Copil
 first create call: tell the user to switch the chat to an interactive mode (in VS Code: Interactive) and to start
 again. Never report the task as done when you created nothing.
 
+## Where the user works (before anything else)
+
+Settle this first, before step 0 and before any question about the agent.
+
+1. Inside VS Code? The flow runs inside VS Code when the client is VS Code Copilot Chat, or when any of these is set in
+   the environment (check with one command, for example
+   `printf '%s|%s|%s\n' "$TERM_PROGRAM" "$VSCODE_PID" "$VSCODE_IPC_HOOK_CLI"`):
+   - `TERM_PROGRAM=vscode`
+   - `VSCODE_PID` (any value)
+   - `VSCODE_IPC_HOOK_CLI` (any value)
+
+   Inside VS Code, do not ask where the user works. When `CN_WORKSPACE` in `~/.codenow/config` is not set, save
+   `vscode` with `cn-setup --workspace vscode`. Do all steps here, in this chat. Step 5 says how to go on after the
+   clone.
+2. Started with `cn-new-agent --here` (the environment variable `CN_NEW_AGENT_HERE=1`, or `--here` in the request):
+   the workspace is `terminal` for this run. Do not ask and do not change `CN_WORKSPACE`.
+3. Otherwise read `CN_WORKSPACE` in `~/.codenow/config` (`terminal` or `vscode`). When it is set, use it and tell the
+   user in one line (change it with `cn-setup --workspace terminal|vscode`). When it is not set, ask with the choice
+   tool: "Where do you want to work on the agent: in this terminal, or in VS Code?" Options: "In this terminal"
+   (recommended) and "In VS Code". Save the answer with `cn-setup --workspace terminal` or
+   `cn-setup --workspace vscode` (it writes only that line). If you cannot run a command, give the user that one
+   command.
+
+- `terminal`: never run `code` during the flow. Steps 0 to 5 go on in this session.
+- `vscode` in a terminal assistant (Claude Code CLI, Codex, Copilot CLI) outside VS Code: switch now. Do not do step 0
+  and do not ask any question about the agent here. Check that the `code` command exists (`command -v code`).
+  - When it does not exist, tell the user only this and stop: "The `code` command is not on your PATH. In VS Code,
+    open the Command Palette and run \"Shell Command: Install 'code' command in PATH\", then run cn-new-agent again."
+  - When it exists, run `code .` (this folder is the parent folder of the clone) as the last action of this session.
+    Then stop and tell the user only this: "Continue in VS Code: in the window that opened, open the chat (Claude
+    Code extension, or Copilot Chat in Interactive mode) and type /codenow-new-agent (Copilot Chat: ask it to use the
+    codenow-new-agent skill). Nothing else runs in this terminal."
+
 ## 0. Check and pick the MCP server
 
 - Read `CODENOW_MCP_URL` from `~/.codenow/config`. Use the MCP server whose URL is that one; its tool prefix depends
@@ -23,20 +56,6 @@ again. Never report the task as done when you created nothing.
   need a CodeNOW API key (`CODENOW_API_KEY`, see `cn-setup`); in VS Code Copilot Chat the user starts the server
   (Command Palette: MCP: List Servers, the server, Start Server) and enters the API key. Then start again. Do no other
   step while the server does not answer.
-
-## Where the user works
-
-Ask once, with the choice tool: "Where do you want to work on the agent: in this terminal, or in VS Code?" Options:
-"In this terminal" and "In VS Code". The recommended (first) option is the stored value: `CN_WORKSPACE` in
-`~/.codenow/config` (`terminal` or `vscode`); without a stored value it is "In this terminal". Save the answer with
-`cn-setup --workspace terminal` or `cn-setup --workspace vscode` (it writes only that line). If you cannot run a
-command, give the user that one command.
-
-In VS Code Copilot Chat, do not ask: the workspace is `vscode`, because only a chat in the new window of the clone has
-the repository's skills.
-
-- `terminal`: never run `code` during the flow. Step 5 goes on in this session.
-- `vscode`: step 5 opens the clone in VS Code as the last action, then stops.
 
 ## 1. What the agent does
 
@@ -86,17 +105,24 @@ makes the swarm id from the name. Create it with `agent_swarm_create` (`name`, `
 ## 4. Clone
 
 Ask for the parent folder (default: the current folder) and run `git clone <httpAddress> <agent name>` there. Do not
-open an editor here: step 5 does it, and only for the `vscode` workspace.
+open an editor here: step 5 does it, and only for Copilot Chat in VS Code.
 
 ## 5. Continue with the start skill
 
-### Workspace `vscode` (always in VS Code Copilot Chat)
+### Inside VS Code, Copilot Chat
 
-Run `code <agent name>` as the last action of this flow; when the `code` command does not exist, tell the user to open
-the folder `<agent name>` in VS Code. Then stop and tell the user only this: "Continue in VS Code: open the chat
-(Claude Code extension or Copilot Chat in Interactive mode) in the new window and type /start. Nothing else runs in
-this terminal." Do not run the start skill here: only a chat in the new window has the repository's `AGENTS.md` and
-skills.
+Run `code <agent name>` as the last action of this flow: it opens the clone in a new window, because only a chat in
+that window has the repository's `AGENTS.md` and skills. When the `code` command does not exist, tell the user to open
+the folder `<agent name>` in VS Code (File, Open Folder). Then stop and tell the user only this: "Continue in the new
+VS Code window: open Copilot Chat in Interactive mode and type /start." Do not run the start skill here.
+
+### Inside VS Code, Claude Code
+
+Go on as in the workspace `terminal` below, in this same session: run the start skill with the cloned repository as
+the working folder for every command. Do not run `code` and do not open a new window. Only when the user asks, open the
+clone in this window (`code -r <agent name>`) as the last action: VS Code then reloads the window and this chat ends.
+At the end, instead of the `code <agent name>` hint, tell the user to open the folder `<agent name>` in VS Code for
+daily work; there the repository's skills are commands.
 
 ### Workspace `terminal`
 

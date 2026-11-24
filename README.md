@@ -27,7 +27,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 |---|---|
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
-| `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
+| `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. With `CN_WORKSPACE=vscode` it opens VS Code at once instead (`--here`: this terminal). |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status` (with the agent's identity and the console URL), `down`, `hub` (all your sandboxes on one page). `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
@@ -46,11 +46,21 @@ Exit codes of `cn-wait` and `cn-call`:
 ## The flow
 
 1. `cn-setup` once per computer.
-2. `cn-new-agent` asks once where you work on the agent, in this terminal or in VS Code (stored as `CN_WORKSPACE` in
-   `~/.codenow/config`; change it with `cn-setup --workspace terminal|vscode`), creates the agent and clones it.
-3. The agent repository's `start` skill (`/start`) goes on. Terminal: in the same session; `code` is never run, only
-   printed as a hint at the end. VS Code: the clone opens in a new VS Code window as the last action, and you type
-   `/start` in its chat (Claude Code extension, or Copilot Chat in Interactive mode). When the developer identity is
+2. `cn-new-agent` first settles where you work on the agent, in this terminal or in VS Code (asked once, stored as
+   `CN_WORKSPACE` in `~/.codenow/config`; change it with `cn-setup --workspace terminal|vscode`).
+   - Terminal: all steps go on in the same session; `code` is never run, only printed as a hint at the end.
+   - VS Code: the switch happens at once, before any question about the agent. `cn-new-agent` (or the skill in a
+     terminal assistant) runs `code .` in the current folder and stops; in the window that opened, open the chat
+     (Claude Code extension, or Copilot Chat in Interactive mode) and type `/codenow-new-agent` (Copilot Chat: ask it
+     to use the codenow-new-agent skill). Without the `code` command it tells you to install it (Command Palette:
+     "Shell Command: Install 'code' command in PATH"). `cn-new-agent --here` works in the terminal this once.
+   - Inside VS Code (`TERM_PROGRAM=vscode`, `VSCODE_PID` or `VSCODE_IPC_HOOK_CLI` set, or Copilot Chat) the skill asks
+     nothing about the workspace and runs every step there.
+
+   It creates the agent and clones it.
+3. The agent repository's `start` skill (`/start`) goes on. Terminal, and Claude Code inside VS Code: in the same
+   session, with the clone as the working folder. Copilot Chat in VS Code: the clone opens in a new VS Code window,
+   and you type `/start` in its chat, because only that window has the repository's skills. When the developer identity is
    set up (`cn-setup --only-gateway`), `/start` runs the local sandbox with `cn-sandbox up --as-me`. It sets up
    your personal-dev environment, the CI triggers, the first release and the deployment with the agent's service
    account; for the CodeNOW Agent SDK also the local sandbox, for Google ADK a local run with the fake model and a
@@ -221,8 +231,9 @@ the stored one. `cn-setup --forget-key` removes the stored key. The MCP URL must
   comments is not changed, and `cn-setup` prints the lines to add by hand.
   - Use the chat in the Interactive mode, not Autopilot: in Autopilot the assistant cannot ask you to confirm a change
     in CodeNOW, so it stops at the first one.
-  - `cn-new-agent` cannot start the chat in VS Code. Open the folder in VS Code and write in the chat: "Use the
-    codenow-new-agent skill to create a new CodeNOW agent and clone it into this folder."
+  - `cn-new-agent` cannot start the chat in VS Code: with `CN_WORKSPACE=vscode` it opens the folder in VS Code, and
+    you write in the chat: "Use the codenow-new-agent skill to create a new CodeNOW agent and clone it into this
+    folder."
 
 ## Uninstall
 

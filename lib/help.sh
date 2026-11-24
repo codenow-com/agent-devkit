@@ -8,7 +8,7 @@ cn_usage_line() {
   case "$1" in
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
-    cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot]" ;;
+    cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot] [--here]" ;;
     cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me|hub [args]" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
@@ -141,7 +141,7 @@ NAME
     cn-new-agent - create a CodeNOW agent with your coding assistant
 
 SYNOPSIS
-    cn-new-agent [--with claude|codex|copilot]
+    cn-new-agent [--with claude|codex|copilot] [--here]
     cn-new-agent -h | --help
 
 DESCRIPTION
@@ -150,19 +150,32 @@ DESCRIPTION
     swarm and name, creates it from the template you pick through the
     CodeNOW MCP server and clones its repository here. Without --with it
     uses the first assistant found: claude, codex, copilot.
-    It asks once where you work on the agent: in this terminal (/start
-    goes on in the same session, `code' is never run) or in VS Code (the
-    clone opens in a new window, where you type /start). The answer is
-    stored as CN_WORKSPACE (cn-setup --workspace terminal|vscode).
+    First it settles where you work on the agent, stored as CN_WORKSPACE
+    (cn-setup --workspace terminal|vscode); the skill asks once when it is
+    not set.
+    terminal: every step and /start go on in this session; `code' is
+        never run.
+    vscode: the whole flow moves to VS Code at once. With CN_WORKSPACE=
+        vscode this command starts no assistant: it runs `code .' and
+        tells you to type /codenow-new-agent in the chat of the window
+        that opened. Without the `code' command it prints how to install
+        it and exits 1.
+    Inside VS Code (TERM_PROGRAM=vscode, VSCODE_PID or
+    VSCODE_IPC_HOOK_CLI set) nothing is asked and the flow stays there.
 
 OPTIONS
     --with <assistant>
         Use this assistant: claude, codex or copilot.
+    --here
+        Work in this terminal this once, also when CN_WORKSPACE=vscode.
     -h, --help
         Print this help and exit.
 
 ENVIRONMENT
-    PATH   where the assistants (claude, codex, copilot) are found
+    PATH   where the assistants (claude, codex, copilot) and code are
+           found
+    TERM_PROGRAM, VSCODE_PID, VSCODE_IPC_HOOK_CLI
+           set: you are inside VS Code
 
 FILES
     ~/.claude/skills, ~/.codex/skills, ~/.copilot/skills
@@ -173,12 +186,15 @@ FILES
 
 EXIT STATUS
     The exit status of the assistant, which replaces this command.
-    1    no assistant found, or the one named is not installed
+    0    CN_WORKSPACE=vscode: VS Code opened
+    1    no assistant found, the one named is not installed, or
+         CN_WORKSPACE=vscode and the `code' command is missing
     2    wrong arguments
 
 EXAMPLES
     cn-new-agent
     cn-new-agent --with codex
+    cn-new-agent --here
 
 SEE ALSO
     cn-setup(1), cn-sandbox(1), cn-wait(1)
@@ -350,9 +366,9 @@ OPTIONS
         Run only that step (with --check: only its report).
     --workspace terminal | vscode
         Save CN_WORKSPACE in ~/.codenow/config, then exit: where
-        cn-new-agent goes on after the clone (terminal: the same
-        session; vscode: a new VS Code window). The codenow-new-agent
-        skill asks once and runs this.
+        cn-new-agent runs (terminal: in the same session; vscode: it
+        opens VS Code at once and the flow goes on in its chat). The
+        codenow-new-agent skill asks once and runs this.
     -h, --help
         Print this help and exit.
 
