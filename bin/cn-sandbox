@@ -7,9 +7,13 @@
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
 #   cn-sandbox token --stop     stop the background refresh that `up` started, for every sandbox
-#   cn-sandbox up --as-me       write the developer identity block into the agent's .env, then `up` (also before the
-#                               agent's first deployment: the console login is then the local dev identity provider)
-#   cn-sandbox as-me off|status remove the block (and stop the refresh) | show it and the stored values
+#   cn-sandbox up               runs the agent as you (the developer identity) whenever it is ready: it writes the
+#                               identity block into the agent's .env (also before the agent's first deployment: the
+#                               console login is then the local dev identity provider). Not ready: one line says why
+#                               and the deployment token is used.
+#   cn-sandbox up --as-me       the same, and clears `as-me off` (stops when the identity is not ready)
+#   cn-sandbox up --deployment-token   this run only on the deployment's token; the next `up` runs as you again
+#   cn-sandbox as-me off|on|status     the deployment token from now on (remembered in .env) | as you again | show it
 #   cn-sandbox hub [--stop|--status]  the page with every sandbox on this computer (http://localhost:8079/)
 #
 # With CN_IDENTITY_PROVIDER=developer (in the environment or the agent's .env) the agent runs under your own identity:
@@ -72,10 +76,17 @@ if [ "${1:-}" = as-me ]; then
   case "${2:-}" in
     off)
       asme_off "$env_file"
+      asme_mark_off "$env_file"
+      say "from now on cn-sandbox up uses the deployment token in this repository (cn-sandbox as-me on: as you again)"
       token_share_stop "$(token_file_path "$env_file")" "$root"
       exit 0 ;;
+    on)
+      asme_mark_on "$env_file"
+      asme_on "$root" "$env_file"
+      say "cn-sandbox up runs the agent as you again"
+      exit 0 ;;
     status) asme_status "$env_file"; exit 0 ;;
-    *) cn_usage_error cn-sandbox "as-me needs off or status" ;;
+    *) cn_usage_error cn-sandbox "as-me needs off, on or status" ;;
   esac
 fi
 [ -f "$root/sandbox/sandbox.sh" ] || { echo "cn-sandbox: $root has no sandbox/sandbox.sh (an agent from the CodeNOW Agent SDK template 1.1.0 or newer has one)" >&2; exit 1; }
@@ -83,18 +94,21 @@ cd "$root"
 case "${1:-}" in
   up)
     args=()
-    as_me=0
+    choice=default
     for arg in "$@"; do
-      if [ "$arg" = --as-me ]; then as_me=1; else args+=("$arg"); fi
+      case "$arg" in
+        --as-me) choice=as-me ;;
+        --deployment-token) choice=deployment ;;
+        *) args+=("$arg") ;;
+      esac
     done
     set -- "${args[@]}"
-    if [ "$as_me" = 1 ]; then
-      load_config
-      asme_on "$root" "$env_file"
-    fi
+    load_config
+    asme_choose "$root" "$env_file" "$choice"   # the identity of this run (as_me.sh); writes sandbox/.run/identity-mode
     if developer_mode; then
       file="$(token_file_path "$env_file")"
-      token_write "$file" || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
+      [ -n "$ASME_TOKEN_WRITTEN" ] || token_write "$file" \
+        || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
       export CN_IDENTITY_TOKEN_FILE="$file"   # the sandbox copies the token from here
       asme_predeploy_env   # before the first deployment the sandbox takes the gateway from these
       token_share_start "$file" "$root" "$(asme_project "$root")" "$self"

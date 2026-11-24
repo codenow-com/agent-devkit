@@ -144,6 +144,18 @@ your person in the org chart. Your person must be in the organisation, else Work
    `cn-sandbox token` once, or `cn-sandbox token --watch` in a terminal of its own; `cn-sandbox token --stop` stops a
    background refresh.
 
+`cn-sandbox up` runs the agent as you by default, until you say otherwise: whenever your identity is ready
+(`CODENOW_AGW_CLIENT_ID` stored, `oidc-token` gives a token, the SDK pin is 2.24.0 or newer) it writes or refreshes
+the block exactly like `up --as-me`. When it is not ready, `up` prints one line with the reason and the fix (e.g.
+`identity: deployment token: your own identity is not ready: no agent gateway client is set (CODENOW_AGW_CLIENT_ID);
+fix: cn-setup --only-gateway`) and runs on the deployment token. The deployment token only on your command:
+`cn-sandbox up --deployment-token` for one run (the next `up` runs as you again), or `cn-sandbox as-me off` from now
+on in this repository (a comment line in `.env` remembers it) until `cn-sandbox as-me on` or `cn-sandbox up --as-me`.
+The first deployment changes nothing of this: only the console login moves from the local dev identity provider to
+the agent's own client. `cn-sandbox status` prints the mode and its source (`mode: as you (default)`,
+`mode: deployment token (as-me off)`, `mode: deployment token (identity not ready: ...)`); the hub's identity chip shows
+the same.
+
 `cn-sandbox as-me status` shows the block and the stored values; `cn-sandbox as-me off` removes the block and stops
 the token refresh when no other sandbox uses it. You can also write the four lines into `.env` by hand; `cn-sandbox up`
 then works the same. While the block is in `.env`, a plain `cn-sandbox up` also runs the agent as you.

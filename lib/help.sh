@@ -9,7 +9,7 @@ cn_usage_line() {
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot] [--here]" ;;
-    cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me|hub [args]" ;;
+    cn-sandbox) echo "usage: cn-sandbox up [--as-me|--deployment-token]|down|run|logs|events|status|token|as-me|hub" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-venv) echo "usage: cn-venv [--python <version>]" ;;
@@ -222,8 +222,8 @@ NAME
     cn-sandbox - run the local sandbox of the agent repository you are in
 
 SYNOPSIS
-    cn-sandbox up [--as-me] | down | logs | events | status
-    cn-sandbox as-me off | status
+    cn-sandbox up [--as-me | --deployment-token] | down | logs | events | status
+    cn-sandbox as-me off | on | status
     cn-sandbox run <pipeline> [subject] [json]
     cn-sandbox token [--watch | --stop]
     cn-sandbox hub [--stop | --status]
@@ -239,8 +239,13 @@ DESCRIPTION
     `bash sandbox/sandbox.sh help' there.
 
 OPTIONS
-    up       Start the sandbox. In developer mode (CN_IDENTITY_PROVIDER=
-             developer, e.g. the block of `up --as-me' in .env) it first
+    up       Start the sandbox, as you by default: when your identity is
+             ready (CODENOW_AGW_CLIENT_ID stored, oidc-token gives a token,
+             the SDK pin is new enough) it writes the block of `up --as-me'
+             into .env. Not ready: one line says why and how to fix it, and
+             the deployment token is used. After `as-me off' it uses the
+             deployment token until `as-me on'. In developer mode
+             (CN_IDENTITY_PROVIDER=developer) it first
              writes your token and starts `token --watch' in the
              background, unless it already runs for another sandbox: one
              refresh serves every sandbox of yours. Then it prints the
@@ -260,17 +265,26 @@ OPTIONS
              first deployment: then the sandbox takes the gateway from
              CODENOW_AGW_URL and the console login is the local dev
              identity provider, signed in as you (template after 1.7.0).
+             Clears `as-me off'; stops when the identity is not ready.
+    up --deployment-token
+             This run only on the deployment's token (the block leaves
+             .env); the next `up' runs as you again.
     status   Print the identity the running agent uses (from its log):
              developer (tenant, client), deployment token, or unknown
              (agent not running); its last Workforce onboarding line; the
-             console login (local dev IdP before the first deployment, or
-             the agent's own client); and the console URL; in developer
-             mode also `token refresh: running for N sandbox(es)' or `not
-             running'. Then the status
-             of the agent's sandbox.sh. Never prints a token.
+             mode of the last `up' and its source (as you (default),
+             deployment token (as-me off), deployment token (identity not
+             ready: ...)); the console login (local dev IdP before the
+             first deployment, or the agent's own client); and the console
+             URL; in developer mode also `token refresh: running for N
+             sandbox(es)' or `not running'. Then the status of the agent's
+             sandbox.sh. Never prints a token.
     as-me off
-             Remove the block from .env and stop the token refresh when
-             no other sandbox uses it.
+             Remove the block from .env, remember the choice there (a
+             comment line), and stop the token refresh when no other
+             sandbox uses it: every later `up' uses the deployment token.
+    as-me on
+             Run as you again: remove that line and write the block.
     as-me status
              Show the block and the values stored by cn-setup.
     down     Stop the sandbox, and the background token refresh when no

@@ -16,6 +16,7 @@ CLIENT = "demo-tenant-demo-environment-agent-gateway"
 OBSERVER = "https://observer-nov18-observer-test.example"
 
 FAKE_TOKEN = """#!/usr/bin/env bash
+[ -z "${FAKE_OIDC_FAIL:-}" ] || exit 1
 printf 'eyJhbGciOiJSUzI1NiJ9.eyJuIjoxfQ.SECRETSIG\\n'
 """
 # python3 -m pip index versions ...: the fake pip is a python3 wrapper that answers only `-m pip`.
@@ -48,6 +49,7 @@ INFO codenow_agent_sdk.workforce.onboarding: Workforce: onboarding pending (inst
 INFO codenow_agent_sdk.workforce.onboarding: Workforce: onboarding approved (instance dev-a1b2, mode shadow)
 INFO token eyJhbGciOiJSUzI1NiJ9.eyJuIjoxfQ.SECRETSIG
 """
+OFF = "# cn-devkit: identity=deployment (cn-sandbox as-me on runs the agent as you again)"
 LEGACY_LOG = "INFO codenow_agent_sdk.agent.identity_provider: identity: adapter legacy-refresh-token\n"
 
 
@@ -136,7 +138,7 @@ class AsMeTest(unittest.TestCase):
         out = self.run_cn("as-me", "off")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("block removed", out.stdout)
-        self.assertEqual(self.env_file(), "A=1\n")
+        self.assertEqual(self.env_file(), f"A=1\n{OFF}\n")   # the block is gone; `off` is remembered
         self.assertIn("no developer identity block", self.run_cn("as-me", "status").stdout)
         self.assertIn("has no developer identity block", self.run_cn("as-me", "off").stdout)
 
@@ -190,9 +192,9 @@ class AsMeTest(unittest.TestCase):
         self.assertIn("sandbox.sh up file=", log)
         self.assertNotIn("file= ", log)                     # the token file is passed: developer mode
 
-    def test_up_as_me_after_a_plain_up_and_down(self):
+    def test_up_as_me_after_a_deployment_token_up_and_down(self):
         self.env_file("A=1\nWORKFORCE_URL=\n")
-        out = self.run_cn("up")
+        out = self.run_cn("up", "--deployment-token")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("sandbox.sh up file= ", (self.state / "sandbox.log").read_text())   # deployment token
         self.assertEqual(self.run_cn("down").returncode, 0)
@@ -231,9 +233,9 @@ class AsMeTest(unittest.TestCase):
         self.assertIn("agw=https://agent-gateway.example iam=https://iam.example/auth/realms/codenow",
                       (self.state / "sandbox.log").read_text())
 
-    def test_plain_up_without_developer_mode_passes_no_gateway(self):
+    def test_the_deployment_token_passes_no_gateway(self):
         self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_AGW_URL=https://agent-gateway.example\n")
-        out = self.run_cn("up")
+        out = self.run_cn("up", "--deployment-token")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("agw= iam=", (self.state / "sandbox.log").read_text())
 
@@ -241,7 +243,6 @@ class AsMeTest(unittest.TestCase):
         self.env_file("A=1\n")
         self.run_cn("up", "--as-me")
         (self.state / "agent.log").write_text(DEV_LOG)
-        (self.repo / "sandbox" / ".run").mkdir()
         (self.repo / "sandbox" / ".run" / "predeploy").write_text("user=demotenant\n")
         out = self.run_cn("status")
         self.assertEqual(out.returncode, 0, out.stderr)
@@ -306,14 +307,108 @@ class AsMeTest(unittest.TestCase):
         (self.repo / "requirements.txt").write_text("codenow-agent-sdk==2.20.0\n")
         out = self.run_cn("up", "--as-me")
         self.assertEqual(out.returncode, 1)
-        self.assertIn("codenow-agent-sdk==2.24.0 or newer", out.stderr)
+        self.assertIn("pins codenow-agent-sdk 2.20.0, older than 2.24.0", out.stderr)
         self.assertEqual((self.repo / "requirements.txt").read_text(), "codenow-agent-sdk==2.20.0\n")
         self.assertFalse((self.state / "pip.log").exists())
+
+    def mode(self):
+        return (self.repo / "sandbox" / ".run" / "identity-mode").read_text().strip()
+
+    def last_up(self):
+        return (self.state / "sandbox.log").read_text().splitlines()[-1]
+
+    def test_plain_up_runs_as_you_by_default_when_the_identity_is_ready(self):
+        self.env_file("A=1\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(BEGIN, self.env_file())
+        self.assertNotIn("sandbox.sh up file= ", self.last_up())   # the token file is passed: developer mode
+        self.assertEqual(self.mode(), "as you (default)")
+
+    def test_without_a_client_plain_up_says_why_and_uses_the_deployment_token(self):
+        self.settings(f"CODENOW_WORKFORCE_URL={OBSERVER}\n")
+        self.env_file("A=1\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("identity: deployment token: your own identity is not ready: no agent gateway client is set "
+                      "(CODENOW_AGW_CLIENT_ID); fix: cn-setup --only-gateway", out.stdout)
+        self.assertNotIn(BEGIN, self.env_file())
+        self.assertIn("sandbox.sh up file= ", self.last_up())
+        self.assertEqual(self.mode(), "deployment token (identity not ready: no agent gateway client is set "
+                                      "(CODENOW_AGW_CLIENT_ID))")
+
+    def test_a_failing_oidc_token_falls_back_with_the_reason_and_removes_a_stale_block(self):
+        self.env_file("A=1\n" + self.block("CN_IDENTITY_PROVIDER=developer", f"CN_IDENTITY_DEVELOPER_CLIENTS={CLIENT}"))
+        self.env["FAKE_OIDC_FAIL"] = "1"
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("not ready: oidc-token cn-agw gave no token; fix: oidc-add cn-agw", out.stdout)
+        self.assertNotIn(BEGIN, self.env_file())
+        self.assertIn("sandbox.sh up file= ", self.last_up())
+
+    def test_as_me_without_a_ready_identity_stops(self):
+        self.settings("")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("cannot run as you: no agent gateway client", out.stderr)
+
+    def test_as_me_off_is_remembered_until_as_me_on(self):
+        self.env_file("A=1\n")
+        self.run_cn("up")
+        self.assertEqual(self.run_cn("as-me", "off").returncode, 0)
+        for _ in range(2):   # every later plain up keeps the deployment token
+            out = self.run_cn("up")
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertIn("identity: deployment token (as-me off); cn-sandbox as-me on runs the agent as you again",
+                          out.stdout)
+            self.assertIn("sandbox.sh up file= ", self.last_up())
+            self.assertEqual(self.mode(), "deployment token (as-me off)")
+        self.assertIn("as-me off: cn-sandbox up uses the deployment token", self.run_cn("as-me", "status").stdout)
+        out = self.run_cn("as-me", "on")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn(OFF, self.env_file())
+        self.assertIn(BEGIN, self.env_file())
+        self.run_cn("up")
+        self.assertNotIn("sandbox.sh up file= ", self.last_up())
+        self.assertEqual(self.mode(), "as you (default)")
+
+    def test_up_as_me_clears_as_me_off(self):
+        self.env_file("A=1\n")
+        self.run_cn("as-me", "off")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn(OFF, self.env_file())
+        self.assertEqual(self.mode(), "as you (--as-me)")
+        self.run_cn("up")
+        self.assertEqual(self.mode(), "as you (default)")
+
+    def test_deployment_token_is_for_one_run_only(self):
+        self.env_file("A=1\n")
+        self.run_cn("up")
+        out = self.run_cn("up", "--deployment-token")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("the next cn-sandbox up runs as you again", out.stdout)
+        self.assertIn("sandbox.sh up file= ", self.last_up())
+        self.assertEqual(self.mode(), "deployment token (this run: --deployment-token)")
+        self.assertNotIn(OFF, self.env_file())
+        self.run_cn("up")
+        self.assertNotIn("sandbox.sh up file= ", self.last_up())
+        self.assertIn(BEGIN, self.env_file())
+
+    def test_status_shows_the_mode_and_its_source(self):
+        self.env_file("A=1\n")
+        self.run_cn("up")
+        (self.state / "agent.log").write_text(DEV_LOG)
+        self.assertIn("cn-sandbox: mode: as you (default)\n", self.run_cn("status").stdout)
+        self.run_cn("as-me", "off")
+        self.run_cn("up")
+        (self.state / "agent.log").write_text(LEGACY_LOG)
+        self.assertIn("cn-sandbox: mode: deployment token (as-me off)\n", self.run_cn("status").stdout)
 
     def test_as_me_needs_off_or_status(self):
         out = self.run_cn("as-me", "bogus")
         self.assertEqual(out.returncode, 2)
-        self.assertIn("off or status", out.stderr)
+        self.assertIn("off, on or status", out.stderr)
 
 
 if __name__ == "__main__":

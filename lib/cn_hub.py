@@ -115,6 +115,15 @@ def sdk_version(repo: pathlib.Path):
     return found.group(1) if found else None
 
 
+def identity_mode(repo: pathlib.Path):
+    """The first line of sandbox/.run/identity-mode (cn-sandbox up), at most 160 characters; None when missing."""
+    try:
+        line = (repo / "sandbox" / ".run" / "identity-mode").read_text().splitlines()[0].strip()
+    except (OSError, IndexError):
+        return None
+    return line[:160] or None
+
+
 def identity_of(log: str, env: dict) -> dict:
     adapter = None
     for found in re.finditer(r"identity: adapter ([A-Za-z0-9_.-]+)", log):
@@ -265,6 +274,8 @@ def one_sandbox(project: str, containers: list, docker, refresh: dict) -> dict:
         "identity": identity_of(log, env),
         # sandbox.sh writes sandbox/.run/predeploy while the agent runs before its first deployment
         "predeploy": bool(working_dir) and (repo / "sandbox" / ".run" / "predeploy").is_file(),
+        # cn-sandbox up writes the mode and its source: "as you (default)", "deployment token (as-me off)", ...
+        "identity_mode": identity_mode(repo) if working_dir else None,
         "workforce": workforce,
         "egress": [{"host": h, "kind": host_kind(h, workforce["url_host"] or "")} for h in allow],
         "token_refresh": {**{k: v for k, v in refresh.items() if k != "projects"},

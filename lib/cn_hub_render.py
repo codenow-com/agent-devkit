@@ -102,8 +102,12 @@ def chip(text: str, tone: str) -> str:
     return f'<span class="chip {tone}">{e(text)}</span>'
 
 
-def identity_chip(identity: dict) -> str:
+def identity_chip(identity: dict, source: str | None = None) -> str:
+    """The identity the agent's log names; labelled with cn-sandbox's mode and source when the two agree."""
     mode = (identity or {}).get("mode")
+    if source and mode in ("developer", "legacy-refresh-token") \
+            and source.startswith("as you") == (mode == "developer"):
+        return chip(source, "ok" if mode == "developer" else "warn")
     if mode == "developer":
         return chip("as you (developer)", "ok")
     if mode == "legacy-refresh-token":
@@ -167,7 +171,7 @@ def card(sb: dict, open_diagram: bool) -> str:
                              f'<a href="{e(base)}/search">Search</a> <span class="muted">(read only)</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     return (f'<article class="card {e(status)}" id="sb-{e(name)}">'
-            f'<header><h2>{e(name)}</h2>{status_chip(status)}{identity_chip(sb.get("identity"))}'
+            f'<header><h2>{e(name)}</h2>{status_chip(status)}{identity_chip(sb.get("identity"), sb.get("identity_mode"))}'
             f'{predeploy_chip(sb)}{workforce_chip(workforce)}</header>'
             f'<p class="repo">{e(sb.get("repo") or "")}</p>{reach}<dl>{facts}</dl>'
             f'<details data-key="{e(name)}"{" open" if open_diagram else ""}>'

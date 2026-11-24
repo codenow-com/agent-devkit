@@ -144,6 +144,19 @@ class CollectorTest(unittest.TestCase):
         self.assertFalse(data["beta"]["predeploy"])
         self.assertIn('class="chip warn">pre-deploy</span>', cn_hub_render.card(data["alpha"], False))
 
+    def test_the_identity_chip_names_the_mode_and_its_source(self):
+        self.assertIsNone(self.data["alpha"]["identity_mode"])
+        (self.tmp / "alpha" / "sandbox" / ".run" / "identity-mode").write_text("as you (default)\n")
+        (self.tmp / "beta" / "sandbox" / ".run" / "identity-mode").write_text("deployment token (as-me off)\n")
+        data = {sb["name"]: sb for sb in cn_hub.collect(self.docker, self.home)}
+        self.assertEqual(data["alpha"]["identity_mode"], "as you (default)")
+        self.assertIn('class="chip ok">as you (default)</span>', cn_hub_render.card(data["alpha"], False))
+        self.assertIn('class="chip warn">deployment token (as-me off)</span>', cn_hub_render.card(data["beta"], False))
+        # the agent's log wins when the two disagree (e.g. CN_IDENTITY_PROVIDER set in the shell)
+        (self.tmp / "alpha" / "sandbox" / ".run" / "identity-mode").write_text("deployment token (as-me off)\n")
+        data = {sb["name"]: sb for sb in cn_hub.collect(self.docker, self.home)}
+        self.assertIn('class="chip ok">as you (developer)</span>', cn_hub_render.card(data["alpha"], False))
+
     def test_no_token_or_secret_in_the_json_or_the_page(self):
         sandboxes = list(self.data.values())
         for text in (json.dumps(sandboxes), cn_hub_render.page(sandboxes)):

@@ -152,6 +152,90 @@ asme_on() {
   fi
 }
 
+# The persistent `as-me off` of one repository: this comment line in its .env (never a value).
+ASME_OFF_LINE='# cn-devkit: identity=deployment (cn-sandbox as-me on runs the agent as you again)'
+ASME_TOKEN_WRITTEN=""
+
+asme_is_off() { [ -f "$1" ] && grep -qxF "$ASME_OFF_LINE" "$1"; }
+
+asme_mark_off() {
+  local env="$1"
+  asme_is_off "$env" && return 0
+  [ -f "$env" ] || ( umask 077; : > "$env" )
+  if [ -s "$env" ] && [ -n "$(tail -c 1 "$env")" ]; then echo >> "$env"; fi
+  echo "$ASME_OFF_LINE" >> "$env"
+}
+
+asme_mark_on() {  # removes the marker line in place (the file keeps its mode)
+  local env="$1" kept
+  asme_is_off "$env" || return 0
+  kept="$(grep -vxF "$ASME_OFF_LINE" "$env" || true)"
+  printf '%s\n' "$kept" > "$env"
+}
+
+# asme_pin_old <repo>: the SDK pin when it is older than ASME_SDK_MIN, else nothing.
+asme_pin_old() {
+  local pin
+  pin="$(sed -n "s/^$ASME_SDK==\([0-9][0-9.]*\)[[:space:]]*\$/\1/p" "$1/requirements.txt" 2>/dev/null | head -n 1)"
+  [ -n "$pin" ] || return 0
+  [ "$(printf '%s\n%s\n' "$ASME_SDK_MIN" "$pin" | sort -V | head -n 1)" = "$ASME_SDK_MIN" ] || printf '%s' "$pin"
+}
+
+# asme_not_ready <repo> <token file>: why the developer identity cannot be used now (one line), else nothing. The
+# token check writes the token file (oidc-token), so `up` does not ask for it twice. Run it in $( ): it may exit.
+asme_not_ready() {
+  local pin
+  if [ -z "${CODENOW_AGW_CLIENT_ID:-}" ]; then
+    echo "no agent gateway client is set (CODENOW_AGW_CLIENT_ID); fix: cn-setup --only-gateway"; return 0
+  fi
+  if ! have oidc-token; then echo "oidc-token is missing; fix: cn-doctor"; return 0; fi
+  pin="$(asme_pin_old "$1")"
+  if [ -n "$pin" ] && ! interactive; then
+    echo "requirements.txt pins $ASME_SDK $pin, older than $ASME_SDK_MIN; fix: cn-sandbox up --as-me in a terminal"
+    return 0
+  fi
+  if ! ( token_write "$2" ) >/dev/null 2>&1; then
+    echo "oidc-token $(token_account) gave no token; fix: oidc-add $(token_account)"
+  fi
+}
+
+# asme_choose <repo> <env file> default|as-me|deployment: the identity of this `up` (developer by default; the
+# deployment token only on an explicit command, or with the reason when the identity is not ready). It writes the
+# mode and its source to sandbox/.run/identity-mode for cn-sandbox status and the hub.
+asme_choose() {
+  local repo="$1" env="$2" choice="$3" mode reason
+  case "$choice" in
+    deployment)
+      asme_edit "$env" remove >/dev/null || die "could not change $env"
+      mode="deployment token (this run: --deployment-token)"
+      say "identity: deployment token for this run (--deployment-token); the next cn-sandbox up runs as you again" ;;
+    *)
+      if [ "$choice" = default ] && asme_is_off "$env"; then
+        asme_edit "$env" remove >/dev/null || die "could not change $env"
+        mode="deployment token (as-me off)"
+        say "identity: deployment token (as-me off); cn-sandbox as-me on runs the agent as you again"
+      else
+        reason="$(asme_not_ready "$repo" "$(token_file_path "$env")")"
+        [ -n "$reason" ] || ASME_TOKEN_WRITTEN=1   # asme_not_ready wrote the token
+        if [ -n "$reason" ] && [ "$choice" = as-me ]; then die "cannot run as you: $reason"; fi
+        if [ -n "$reason" ]; then
+          asme_edit "$env" remove >/dev/null || die "could not change $env"
+          mode="deployment token (identity not ready: ${reason%%; fix:*})"
+          say "identity: deployment token: your own identity is not ready: $reason"
+        else
+          [ "$choice" = default ] || asme_mark_on "$env"
+          asme_on "$repo" "$env"
+          if [ "$choice" = default ]; then mode="as you (default)"; else mode="as you (--as-me)"; fi
+        fi
+      fi ;;
+  esac
+  mkdir -p "$repo/sandbox/.run"
+  printf '%s\n' "$mode" > "$repo/sandbox/.run/identity-mode"
+}
+
+# asme_mode <repo>: the mode of the last `cn-sandbox up` and its source, or nothing.
+asme_mode() { head -n 1 "$1/sandbox/.run/identity-mode" 2>/dev/null || true; }
+
 asme_off() {
   local env="$1" out
   out="$(asme_edit "$env" remove)" || die "could not change $env"
@@ -167,6 +251,8 @@ asme_status() {
   else
     say "${env:-.env} has no developer identity block (cn-sandbox up --as-me writes it)"
   fi
+  if asme_is_off "$env"; then say "as-me off: cn-sandbox up uses the deployment token (cn-sandbox as-me on: as you)"
+  else say "cn-sandbox up runs the agent as you when your identity is ready (cn-sandbox as-me off: the deployment token)"; fi
   say "stored (~/.codenow/config): client ${CODENOW_AGW_CLIENT_ID:-<not set>}, Workforce ${CODENOW_WORKFORCE_URL:-<not set>}"
 }
 
@@ -241,6 +327,7 @@ asme_identity() {
   workforce="$(printf '%s\n' "$log" | grep -E 'Workforce: (onboarding|declaration) ' | tail -n 1 \
     | sed 's/.*Workforce: /Workforce: /' || true)"
   [ -z "$workforce" ] || say "$workforce"
+  [ -z "$(asme_mode "$repo")" ] || say "mode: $(asme_mode "$repo")"
   asme_console_login "$repo"
   say "console: $(asme_console "$repo") (log in on localhost, not on 127.0.0.1)"
 }
