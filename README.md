@@ -232,6 +232,7 @@ example `sandbox-customs-tariff-advisor`):
 | `/s/<project>/valkey` | `/api/s/<project>/valkey/keys?pattern=` | the keys of a pattern (`SCAN`, at most 1000) with type, TTL and size |
 | `/s/<project>/valkey/<key>` | `/api/s/<project>/valkey/key?key=` | one key: a stream newest first (50 per page, `before=<id>`, filter `kind=`), hash fields, list items, set and sorted-set members, the first 4 KB of a string |
 | `/s/<project>/search?q=` | `/api/s/<project>/search?q=` | runs (id prefix, subject, pipeline, status, summary, error, output), events (the newest 5000 entries of `swarm:events` and `swarm:debug`) and key names |
+| `/s/<project>/try` | `/api/s/<project>/a2a/card` | the agent card and the Try it form (below); it sends, it does not only read |
 
 The run store and Valkey are not published to your computer: the hub reads them with `docker exec` into the
 sandbox's `runstore` and `valkey` containers, each with a timeout of 8 s. Postgres gets only SELECTs that the hub
@@ -240,7 +241,33 @@ and adapts to the columns of older SDK versions. Valkey gets only read commands 
 `XREVRANGE`, `HGETALL`, `LRANGE`, ...). Every answer is capped and masked: JWTs, bearer values, the values of keys
 named like a token, secret, password or API key, and long opaque strings.
 
-The hub only reads: Docker (`docker ps`, `docker inspect`, the agent's log), `sandbox/.run/allow` and
+### Try it: send one A2A message
+
+`/s/<project>/try` (the card's **Try it** link) shows the agent's card (`/.well-known/agent.json`: name,
+description, url, skills with ids, descriptions, input modes and examples) and a form: a skill, a message (a text
+part), an optional subject and an optional JSON object (a data part, the pipeline's facts). **Send** posts one
+JSON-RPC `message/send` to the agent, built as `cn-sandbox run` builds it (`metadata.skillId`, a data part with the
+facts and `subject`), and polls `tasks/get` until the task ends, for at most 120 s. The page then shows the state,
+the task id, the final text, the data parts, the duration, the raw JSON-RPC (masked) and, for an SDK agent, the link
+to the run's page (`/s/<project>/runs/<run_id>`).
+
+This is the hub's only action that changes something: **the agent runs and model calls are billed.** The request
+goes only to `127.0.0.1:<the sandbox's port>` (the card's url is rewritten to it). The hub accepts the POST
+(`/api/s/<project>/a2a/send`) only from its own page: the same origin, a per-process CSRF token in the
+`X-CN-Hub-Token` header, a JSON body of at most 32 KB; one request per sandbox at a time; the answer is read up to
+4 MB.
+
+The caller token is made for each send, the same way as `cn-sandbox run`, and is never sent to the browser,
+printed or logged: `SANDBOX_CALLER_TOKEN` in the hub's environment; with `SANDBOX_IDP=dev` (or the pre-deploy marker
+`sandbox/.run/predeploy`) a dev person token from `bash sandbox/sandbox.sh token person <you>`; in developer mode
+your own token (`oidc-token --time=60 <CN_OIDC_ACCOUNT>`); otherwise the agent's refresh token at the tenant IAM
+(read from `.env` only for that exchange). When no token can be made, the page says why; run the same call from the
+terminal with `cn-sandbox run <pipeline> "<subject>" '<json>'`. A 401 means the agent did not accept the token
+(signature, trusted issuer, or the audience when `A2A_AUDIENCE_MODE=enforce`; the page shows the mode the agent
+logged: `shadow` accepts every token of the trusted issuer); a 403 means the token is valid but the caller may not
+start the skill.
+
+Apart from Try it, the hub only reads: Docker (`docker ps`, `docker inspect`, the agent's log), `sandbox/.run/allow` and
 `sandbox/.run/port` of the repository, and four non-secret keys of `.env` (`CN_IDENTITY_PROVIDER`,
 `CN_IDENTITY_DEVELOPER_CLIENTS`, `WORKFORCE_URL`, `WORKFORCE_MODE`). It masks anything that looks like a token.
 

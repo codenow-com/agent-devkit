@@ -8,7 +8,9 @@
 Routes: `/` the page, `/cards` the cards alone (the page reloads them every 5 s), `/api/sandboxes` the JSON,
 `/api/hub` the hub's own name (for --ping). Per sandbox (read only, lib/cn_hub_data.py): `/s/<project>/runs`,
 `/s/<project>/runs/<run_id>`, `/s/<project>/valkey`, `/s/<project>/valkey/<key>`, `/s/<project>/search?q=`, and
-the JSON under `/api/s/<project>/`: `runs`, `runs/<run_id>`, `valkey/keys`, `valkey/key?key=`, `search?q=`. The data comes from Docker only (the compose projects named sandbox-*,
+the JSON under `/api/s/<project>/`: `runs`, `runs/<run_id>`, `valkey/keys`, `valkey/key?key=`, `search?q=`.
+The one write: `/s/<project>/try` sends one A2A message to the agent (POST /api/s/<project>/a2a/send, same origin and
+CSRF token only; lib/cn_hub_a2a.py), with a caller token made for that send and never shown. The data comes from Docker only (the compose projects named sandbox-*,
 their labels, states, ports and the agent's log) and from the sandbox's own state files in the agent repository
 (sandbox/.run/allow, sandbox/.run/port). It never reads a token: from .env it keeps only four non-secret keys, and
 everything that looks like a token is masked before it leaves this process. The run store and Valkey of a sandbox
@@ -32,7 +34,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import cn_hub_data as data_routes  # noqa: E402  (next to this file)
+import cn_hub_a2a_routes as a2a_routes  # noqa: E402  (next to this file)
+import cn_hub_data as data_routes  # noqa: E402
 import cn_hub_render as render  # noqa: E402
 
 HUB_NAME = "cn-sandbox-hub"
@@ -290,7 +293,8 @@ class Cache:
     """Collects at most every 2 s, however many browser tabs ask."""
 
     def __init__(self, collector, ttl: float = 2.0):
-        self.collector, self.ttl, self.lock, self.at, self.value = collector, ttl, threading.Lock(), 0.0, []
+        # never collected yet: -inf, because time.monotonic() may start near 0 (Python 3.9 on macOS)
+        self.collector, self.ttl, self.lock, self.at, self.value = collector, ttl, threading.Lock(), float("-inf"), []
 
     def get(self) -> list:
         with self.lock:
@@ -328,7 +332,10 @@ def make_handler(cache: Cache, port: int):
                 return
             url = urlparse(self.path)
             path = url.path
-            if path.startswith(("/s/", "/api/s/")):
+            tried = a2a_routes.get_route(path, cache.get(), run_docker)   # the A2A "Try it" (its only write: POST)
+            if tried:
+                self.send(*tried)
+            elif path.startswith(("/s/", "/api/s/")):
                 projects = [sb.get("project") for sb in cache.get()]
                 code, body, kind = data_routes.handle(path, url.query, projects)
                 self.send(code, body, kind)
@@ -342,6 +349,18 @@ def make_handler(cache: Cache, port: int):
                 self.send(200, render.page(cache.get()), "text/html; charset=utf-8")
             else:
                 self.send(404, "not found\n", "text/plain; charset=utf-8")
+
+        def do_POST(self):  # noqa: N802  (only /api/s/<project>/a2a/send; cn_hub_a2a_routes checks origin and CSRF)
+            if self.headers.get("Host", "") not in allowed_hosts:
+                self.send(403, "forbidden host\n", "text/plain; charset=utf-8")
+                return
+            self.send(*a2a_routes.post_route(urlparse(self.path).path, self.headers, self.rfile, cache.get, port,
+                                             run_docker))
+
+        def refuse_method(self):
+            self.send(405, "method not allowed\n", "text/plain; charset=utf-8")
+
+        do_PUT = do_DELETE = do_PATCH = refuse_method
 
     return Handler
 

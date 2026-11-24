@@ -303,8 +303,9 @@ OPTIONS
              every agent sandbox on this computer, its state, identity,
              Workforce onboarding, egress allowlist and a diagram of how it
              is connected, with the link to each agent's console. It
-             reads Docker, changes nothing and never shows a token. Works
-             in any folder. Per sandbox, read only (docker exec):
+             reads Docker, changes nothing (except Try it, below) and
+             never shows a token. Works in any folder. Per sandbox, read
+             only (docker exec):
                /s/<project>/runs[/<run_id>]   the run store: runs, filters,
                                               one run with stages, tool
                                               calls, output and its events
@@ -313,6 +314,16 @@ OPTIONS
                /s/<project>/search?q=         runs, events and key names
              The same as JSON under /api/s/<project>/: runs, runs/<run_id>,
              valkey/keys?pattern=, valkey/key?key=, search?q=.
+             One action that changes something:
+               /s/<project>/try               the agent card and a form
+                                              that sends one A2A message
+                                              (message/send, then tasks/get
+                                              up to 120 s): the agent runs
+                                              and model calls are billed.
+                                              Same origin and CSRF token
+                                              only; the caller token is
+                                              made as for `run' and never
+                                              shown.
     hub --stop
              Stop the hub.
     hub --status

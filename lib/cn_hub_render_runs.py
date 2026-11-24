@@ -101,7 +101,7 @@ def pretty(value) -> str:
 
 def tabs(project: str, active: str) -> str:
     items = [("runs", "Runs", href(project, "runs")), ("valkey", "Valkey", href(project, "valkey")),
-             ("search", "Search", href(project, "search"))]
+             ("search", "Search", href(project, "search")), ("try", "Try it", href(project, "try"))]
     return '<nav class="tabs">' + "".join(
         f'<a href="{e(link)}" class="{"on" if key == active else ""}">{label}</a>' for key, label, link in items) \
         + "</nav>"
