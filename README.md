@@ -27,7 +27,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 |---|---|
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. |
 | `cn-doctor` | Reports what is there and what is missing. Changes nothing. |
-| `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest CodeNOW Agent SDK template and clones the repository. |
+| `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
 | `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
@@ -46,8 +46,10 @@ Exit codes of `cn-wait` and `cn-call`:
 
 1. `cn-setup` once per computer.
 2. `cn-new-agent` creates the agent and clones it.
-3. Open the agent repository in your assistant. Its `start` skill sets up your personal-dev environment, the first
-   release, the deployment with the agent's service account, the CI triggers and the local sandbox.
+3. `cn-new-agent` goes on with the agent repository's `start` skill (`/start` in a session opened there). It sets up
+   your personal-dev environment, the CI triggers, the first release and the deployment with the agent's service
+   account; for the CodeNOW Agent SDK also the local sandbox, for Google ADK a local run with the fake model and a
+   check of the deployed agent's A2A card.
 4. Develop on short-lived branches `feature/<name>/...`: the sandbox for seconds-long loops, a push for a preview in
    your personal-dev environment, a merge to `main` for a release to shared dev.
 

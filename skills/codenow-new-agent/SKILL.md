@@ -1,6 +1,6 @@
 ---
 name: codenow-new-agent
-description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, create the agent from the newest CodeNOW Agent SDK template through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue in the same session with the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
+description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, pick the template (CodeNOW Agent SDK on LangChain, or Google ADK over A2A), create the agent from its newest version through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue in the same session with the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
 ---
 
 # Create a new CodeNOW agent
@@ -43,12 +43,26 @@ makes the swarm id from the name. Create it with `agent_swarm_create` (`name`, `
 
 ## 3. Template and repository
 
-- `templates_agent_list`: take the highest version of `codenow-langchain-agent-sdk` (`custom: true`).
+- Ask which template, with the choice tool: "CodeNOW Agent SDK (LangChain) — recommended" (pipelines in YAML and
+  Markdown, the local sandbox, Workforce support) or "Google ADK (A2A)" (a Google ADK agent that other agents call
+  over A2A, one example tool).
+- `templates_agent_list`: take the highest version of the chosen template, `custom: true`:
+  `codenow-langchain-agent-sdk` or `adk-based-agent`. Compare versions as numbers (`1.10.0` is above `1.9.0`).
+- Google ADK only: the template has two required properties (its `properties` in `templates_agent_list`). Ask for
+  each:
+  - `agentDescription`: the sentence on the agent's A2A card; other agents read it to decide whether to call this
+    one. Suggest the sentence from step 1 and ask the user to confirm or change it.
+  - `skillId`: the id of the agent's one A2A skill; other agents call `call_agent(agent=<agent name>,
+    pipeline=<skill id>)`. Suggest a short verb from the agent's job (for example `ask`, `score`, `triage`). Lower
+    case letters, digits and dashes, starting with a letter (`^[a-z][a-z0-9-]*$`); ask again when it does not match.
 - `scm_providers_list` and `scm_spaces_list`: the CodeNOW provider (`codenow`) and its space; ask when there is a
   choice.
 - `agents_create` with `agentSwarmId`, `name`, `description` (the sentence from step 1),
   `template: {id, version, custom: true}` and
   `scm: {action: CREATE, providerType, providerId, spaceId, existingRepository: false, monoRepository: false}`.
+  For Google ADK, `template` also carries the properties as a map of strings:
+  `template: {id: adk-based-agent, version, custom: true, properties: {agentDescription: "<sentence>", skillId:
+  "<skill id>"}}`.
 - Wait until the agent is `READY`, usually 1 to 2 minutes: call `agents_list` (with the swarm id) every 30 to 60
   seconds and tell the user its state in one line. Do not call `agents_get` while you wait: it answers
   `400 … is not ready` until the agent is ready. Never wait in one long command: a client stops a long tool call.
@@ -70,7 +84,10 @@ skills. Tell the user: "Switch to the new window <agent name>, open Copilot Chat
 In a terminal assistant (Claude Code, Codex, Copilot CLI), do not ask the user to open a new session. Read
 `<agent name>/.claude/skills/start/SKILL.md` (Codex and Copilot:
 `<agent name>/.agents/skills/start/SKILL.md`) and do its steps now, with the cloned repository as the working folder
-for every command. Its step 1 is already done: you know the swarm and the agent.
+for every command. Both templates have this skill. Its step 1 is already done: you know the swarm and the agent. If
+the clone has no start skill (a Google ADK agent from template 1.0.0), tell the user, run the tests and the local run
+of its `README.md` ("Run locally"), and stop.
 
 Tell the user at the end that daily work happens in a session opened in the repository (`cd <agent name>`, then
-`claude`, `codex` or `copilot`): there the repository's skills (`/build-agent`, `/sandbox` and others) are commands.
+`claude`, `codex` or `copilot`): there the repository's skills are commands (CodeNOW Agent SDK: `/build-agent`,
+`/sandbox` and others; Google ADK: `/a2a-protocol`, `/ai-gateway-access` and others).
