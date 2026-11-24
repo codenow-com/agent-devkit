@@ -72,8 +72,8 @@ Exit codes of `cn-wait` and `cn-call`:
    and you type `/start` in its chat, because only that window has the repository's skills. When the developer identity is
    set up (`cn-setup --only-gateway`), `/start` runs the local sandbox with `cn-sandbox up --as-me`. It sets up
    your personal-dev environment, the CI triggers, the first release and the deployment with the agent's service
-   account; for the CodeNOW Agent SDK also the local sandbox, for Google ADK a local run with the fake model and a
-   check of the deployed agent's A2A card.
+   account, and the local sandbox; for Google ADK (template 1.1.0 or newer) also a check of the deployed agent's
+   A2A card.
 4. Develop on short-lived branches `feature/<name>/...`: the sandbox for seconds-long loops, a push for a preview in
    your personal-dev environment, a merge to `main` for a release to shared dev.
 
@@ -122,7 +122,9 @@ your person in the org chart. Your person must be in the organisation, else Work
    account with `oidc-add cn-agw`.
 2. In the agent repository: `cn-sandbox up --as-me`. It checks that `requirements.txt` pins
    `codenow-agent-sdk` 2.24.0 or newer (an older pin: it asks to raise that one line to the newest version of your pip
-   index; commit the change), writes this block into the agent's `.env` and starts the sandbox as in step 3:
+   index; commit the change); an agent of the Google ADK template (1.1.0 or newer: `google-adk` pinned, no
+   `codenow-agent-sdk`) needs no SDK pin and says "ADK agent: SDK pin check not needed". Then it writes this block
+   into the agent's `.env` and starts the sandbox as in step 3:
 
    ```bash
    # >>> cn-devkit: developer identity (cn-sandbox as-me off removes it)

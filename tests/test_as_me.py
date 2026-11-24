@@ -405,6 +405,32 @@ class AsMeTest(unittest.TestCase):
         (self.state / "agent.log").write_text(LEGACY_LOG)
         self.assertIn("cn-sandbox: mode: deployment token (as-me off)\n", self.run_cn("status").stdout)
 
+    def test_plain_up_of_an_adk_agent_runs_as_you_without_the_sdk_pin_check(self):
+        (self.repo / "requirements.txt").write_text("google-adk[a2a]==2.14.1\n")
+        self.env_file("A=1\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("ADK agent: SDK pin check not needed", out.stdout)
+        self.assertIn(BEGIN, self.env_file())
+        self.assertEqual(self.mode(), "as you (default)")
+
+    def test_an_adk_agent_skips_the_sdk_pin_check(self):
+        (self.repo / "requirements.txt").write_text("google-adk[a2a]==2.14.1\na2a-sdk[http-server]==1.3.1\n")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("ADK agent: SDK pin check not needed", out.stdout)
+        self.assertNotIn("has no codenow-agent-sdk", out.stdout)
+        self.assertFalse((self.state / "pip.log").exists())
+        self.assertIn("CN_IDENTITY_PROVIDER=developer", self.env_file())
+        self.assertIn("sandbox.sh up", (self.state / "sandbox.log").read_text())
+
+    def test_an_adk_agent_that_also_pins_the_sdk_is_checked(self):
+        (self.repo / "requirements.txt").write_text("google-adk==2.14.1\ncodenow-agent-sdk==2.20.0\n")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 1)
+        self.assertNotIn("ADK agent", out.stdout + out.stderr)
+        self.assertIn("pins codenow-agent-sdk 2.20.0, older than 2.24.0", out.stderr)
+
     def test_as_me_needs_off_or_status(self):
         out = self.run_cn("as-me", "bogus")
         self.assertEqual(out.returncode, 2)
