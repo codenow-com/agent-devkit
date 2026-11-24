@@ -269,7 +269,7 @@ def page(sandboxes: list) -> str:
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<meta name=\"color-scheme\" content=\"light dark\">"
             f"<title>Agent sandboxes</title>{FAVICON_LINK}<style>{STYLE}{LOGO_STYLE}</style></head><body><main>"
-            f"{title_row('CodeNOW agent sandboxes')}"
+            f"{title_row('Agent sandboxes')}"
             "<p class=\"sub\">Every local agent sandbox on this computer, from Docker. Refreshes every 5 s; "
             "<span id=\"stamp\">live</span>. Stop this page: <code>cn-sandbox hub --stop</code></p>"
             f"<div id=\"cards\">{cards(sandboxes)}</div>{LEGEND}</main>"

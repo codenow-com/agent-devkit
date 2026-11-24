@@ -171,7 +171,7 @@ class CollectorTest(unittest.TestCase):
 
     def test_page_links_consoles_and_draws_one_diagram_per_sandbox(self):
         html = cn_hub_render.page(sorted(self.data.values(), key=lambda s: s["name"]))
-        self.assertIn("<h1>CodeNOW agent sandboxes</h1>", html)
+        self.assertIn("<h1>Agent sandboxes</h1>", html)
         self.assertEqual(html.count('<svg class="dia"'), 3)
         self.assertEqual(html.count('aria-label="How the sandbox'), 3)
         self.assertIn('href="http://localhost:8081/" target="_blank"', html)
