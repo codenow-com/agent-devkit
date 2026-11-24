@@ -60,18 +60,21 @@ calls the AI gateway and Workforce as you; Workforce shows it as `--under-develo
 your person in the org chart. Your person must be in the organisation, else Workforce refuses the agent.
 
 1. Install oidc-agent 5.2.0 or newer (`cn-doctor` checks it) and create the account `cn-agw` once with the device
-   flow, as the agent gateway's client setup describes (`oidc-gen cn-agw --flow=device ...`). After a reboot, load it
-   with `oidc-add cn-agw`.
-2. In the agent's `.env`:
+   flow, as the agent gateway's client setup describes (`oidc-gen cn-agw --flow=device ...`), against the public
+   Keycloak client `<tenant>-<environment>-agent-gateway` (on the demo tenant
+   `demo-tenant-demo-environment-agent-gateway`). After a reboot, load it with `oidc-add cn-agw`.
+2. In the agent's `.env` (the demo tenant's values):
 
    ```bash
    CN_IDENTITY_PROVIDER=developer
    CN_IDENTITY_TOKEN_FILE=~/.codenow/sandbox-token/token
-   CN_IDENTITY_DEVELOPER_CLIENTS=<client id of the cn-agw account>
+   CN_IDENTITY_DEVELOPER_CLIENTS=demo-tenant-demo-environment-agent-gateway
    WORKFORCE_URL=https://<observer host>
+   WORKFORCE_MODE=shadow
    ```
 
    Leave `AI_GATEWAY_REFRESH_TOKEN` empty: the agent refuses to start as you next to a deployed agent's token.
+   `WORKFORCE_MODE` is `off` by default; without `shadow` (or `enforce`) the agent declares nothing.
 3. `cn-sandbox up`. It writes the token (`oidc-token --time=120 cn-agw`) to the token file and starts
    `cn-sandbox token --watch` in the background, which writes a fresh one every 45 s (pid and log in the token's
    folder). `cn-sandbox down` stops it. Without the sandbox: `cn-sandbox token` once, or `cn-sandbox token --watch` in a
