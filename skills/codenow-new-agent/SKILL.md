@@ -1,6 +1,6 @@
 ---
 name: codenow-new-agent
-description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, pick the template (CodeNOW Agent SDK on LangChain, or Google ADK over A2A), create the agent from its newest version through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue in the same session with the agent repository's own start skill. Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
+description: Create a new AI agent in CodeNOW from the user's coding assistant — ask what the agent does, pick or create its agent swarm, pick the template (CodeNOW Agent SDK on LangChain, or Google ADK over A2A), create the agent from its newest version through the CodeNOW MCP server, wait until it is ready and clone its repository, then continue with the agent repository's own start skill in this terminal session or in VS Code (asked once, stored as CN_WORKSPACE). Installed by the CodeNOW agent devkit (cn-setup); started by cn-new-agent.
 ---
 
 # Create a new CodeNOW agent
@@ -23,6 +23,20 @@ again. Never report the task as done when you created nothing.
   need a CodeNOW API key (`CODENOW_API_KEY`, see `cn-setup`); in VS Code Copilot Chat the user starts the server
   (Command Palette: MCP: List Servers, the server, Start Server) and enters the API key. Then start again. Do no other
   step while the server does not answer.
+
+## Where the user works
+
+Ask once, with the choice tool: "Where do you want to work on the agent: in this terminal, or in VS Code?" Options:
+"In this terminal" and "In VS Code". The recommended (first) option is the stored value: `CN_WORKSPACE` in
+`~/.codenow/config` (`terminal` or `vscode`); without a stored value it is "In this terminal". Save the answer with
+`cn-setup --workspace terminal` or `cn-setup --workspace vscode` (it writes only that line). If you cannot run a
+command, give the user that one command.
+
+In VS Code Copilot Chat, do not ask: the workspace is `vscode`, because only a chat in the new window of the clone has
+the repository's skills.
+
+- `terminal`: never run `code` during the flow. Step 5 goes on in this session.
+- `vscode`: step 5 opens the clone in VS Code as the last action, then stops.
 
 ## 1. What the agent does
 
@@ -71,17 +85,30 @@ makes the swarm id from the name. Create it with `agent_swarm_create` (`name`, `
 
 ## 4. Clone
 
-Ask for the parent folder (default: the current folder) and run `git clone <httpAddress> <agent name>` there. Then
-open the clone in the user's editor when the `code` command exists (`code <agent name>`); in VS Code Copilot Chat the
-user goes on in a chat of that new window.
+Ask for the parent folder (default: the current folder) and run `git clone <httpAddress> <agent name>` there. Do not
+open an editor here: step 5 does it, and only for the `vscode` workspace.
 
 ## 5. Continue with the start skill
 
-In VS Code Copilot Chat, stop here: only a chat in the new window of the clone has the repository's `AGENTS.md` and
-skills. Tell the user: "Switch to the new window <agent name>, open Copilot Chat there (Interactive mode) and run
-`/start`". Do not run the start skill in this window.
+### Workspace `vscode` (always in VS Code Copilot Chat)
 
-In a terminal assistant (Claude Code, Codex, Copilot CLI), do not ask the user to open a new session. Read
+Run `code <agent name>` as the last action of this flow; when the `code` command does not exist, tell the user to open
+the folder `<agent name>` in VS Code. Then stop and tell the user only this: "Continue in VS Code: open the chat
+(Claude Code extension or Copilot Chat in Interactive mode) in the new window and type /start. Nothing else runs in
+this terminal." Do not run the start skill here: only a chat in the new window has the repository's `AGENTS.md` and
+skills.
+
+### Workspace `terminal`
+
+Never run `code`. Do not ask the user to open a new session.
+
+Before the start skill, read `CODENOW_AGW_CLIENT_ID` and `CODENOW_WORKFORCE_URL` from `~/.codenow/config`. When both
+are set, the developer identity is ready: tell the start skill so, and where it starts the local sandbox, use
+`cn-sandbox up --as-me` (the local agent runs as the user and appears in Workforce as
+`--under-development-- <agent name>`). When one is missing, the sandbox starts with `cn-sandbox up`; mention that
+`cn-setup --only-gateway` sets up the developer identity.
+
+Read
 `<agent name>/.claude/skills/start/SKILL.md` (Codex and Copilot:
 `<agent name>/.agents/skills/start/SKILL.md`) and do its steps now, with the cloned repository as the working folder
 for every command. Both templates have this skill. Its step 1 is already done: you know the swarm and the agent. If
@@ -90,4 +117,5 @@ of its `README.md` ("Run locally"), and stop.
 
 Tell the user at the end that daily work happens in a session opened in the repository (`cd <agent name>`, then
 `claude`, `codex` or `copilot`): there the repository's skills are commands (CodeNOW Agent SDK: `/build-agent`,
-`/sandbox` and others; Google ADK: `/a2a-protocol`, `/ai-gateway-access` and others).
+`/sandbox` and others; Google ADK: `/a2a-protocol`, `/ai-gateway-access` and others). Last, print only the hint
+`code <agent name>` to browse the code in VS Code; do not run it.

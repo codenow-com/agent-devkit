@@ -10,7 +10,7 @@ cn_usage_line() {
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot]" ;;
     cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me [args]" ;;
-    cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway]" ;;
+    cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway] [--workspace terminal|vscode]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-wait) echo "usage: cn-wait build|deploy <swarm> <agent|environment> [build id] [--max <s>]" ;;
   esac
@@ -150,6 +150,10 @@ DESCRIPTION
     swarm and name, creates it from the template you pick through the
     CodeNOW MCP server and clones its repository here. Without --with it
     uses the first assistant found: claude, codex, copilot.
+    It asks once where you work on the agent: in this terminal (/start
+    goes on in the same session, `code' is never run) or in VS Code (the
+    clone opens in a new window, where you type /start). The answer is
+    stored as CN_WORKSPACE (cn-setup --workspace terminal|vscode).
 
 OPTIONS
     --with <assistant>
@@ -163,6 +167,9 @@ ENVIRONMENT
 FILES
     ~/.claude/skills, ~/.codex/skills, ~/.copilot/skills
         The codenow-new-agent skill (installed by cn-setup).
+    ~/.codenow/config
+        CN_WORKSPACE (terminal or vscode), CODENOW_AGW_CLIENT_ID and
+        CODENOW_WORKFORCE_URL (the developer identity for /start).
 
 EXIT STATUS
     The exit status of the assistant, which replaces this command.
@@ -283,6 +290,7 @@ SYNOPSIS
     cn-setup [--skip-gateway | --only-gateway]
     cn-setup --check [--skip-gateway | --only-gateway]
     cn-setup --forget-key
+    cn-setup --workspace terminal | vscode
     cn-setup -h | --help
 
 DESCRIPTION
@@ -303,6 +311,11 @@ OPTIONS
         Leave out the optional step "Developer identity (agent gateway)".
     --only-gateway
         Run only that step (with --check: only its report).
+    --workspace terminal | vscode
+        Save CN_WORKSPACE in ~/.codenow/config, then exit: where
+        cn-new-agent goes on after the clone (terminal: the same
+        session; vscode: a new VS Code window). The codenow-new-agent
+        skill asks once and runs this.
     -h, --help
         Print this help and exit.
 
@@ -344,6 +357,7 @@ EXAMPLES
     CODENOW_API_KEY=<key> cn-setup
     cn-setup --only-gateway
     cn-setup --forget-key
+    cn-setup --workspace vscode
 
 SEE ALSO
     cn-doctor(1), cn-update(1), cn-new-agent(1), cn-call(1)

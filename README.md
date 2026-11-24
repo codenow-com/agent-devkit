@@ -46,8 +46,12 @@ Exit codes of `cn-wait` and `cn-call`:
 ## The flow
 
 1. `cn-setup` once per computer.
-2. `cn-new-agent` creates the agent and clones it.
-3. `cn-new-agent` goes on with the agent repository's `start` skill (`/start` in a session opened there). It sets up
+2. `cn-new-agent` asks once where you work on the agent, in this terminal or in VS Code (stored as `CN_WORKSPACE` in
+   `~/.codenow/config`; change it with `cn-setup --workspace terminal|vscode`), creates the agent and clones it.
+3. The agent repository's `start` skill (`/start`) goes on. Terminal: in the same session; `code` is never run, only
+   printed as a hint at the end. VS Code: the clone opens in a new VS Code window as the last action, and you type
+   `/start` in its chat (Claude Code extension, or Copilot Chat in Interactive mode). When the developer identity is
+   set up (`cn-setup --only-gateway`), `/start` runs the local sandbox with `cn-sandbox up --as-me`. It sets up
    your personal-dev environment, the CI triggers, the first release and the deployment with the agent's service
    account; for the CodeNOW Agent SDK also the local sandbox, for Google ADK a local run with the fake model and a
    check of the deployed agent's A2A card.

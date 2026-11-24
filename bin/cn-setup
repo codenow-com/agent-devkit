@@ -22,16 +22,30 @@ CN_CMD=cn-setup
 check=0
 forget=0
 gateway=ask
-for arg in "$@"; do
-  case "$arg" in
+workspace=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --check) check=1; CN_CMD=cn-doctor ;;
     --forget-key) forget=1 ;;
     --skip-gateway) gateway=skip ;;
     --only-gateway) gateway=only ;;
-    *) cn_usage_error "$CN_CMD" "unknown option '$arg'" ;;
+    --workspace) workspace="${2:-none}"; [ "$#" -lt 2 ] || shift ;;
+    --workspace=*) workspace="${1#--workspace=}"; workspace="${workspace:-none}" ;;
+    *) cn_usage_error "$CN_CMD" "unknown option '$1'" ;;
   esac
+  shift
 done
+if [ -n "$workspace" ]; then
+  [ "$check" = 0 ] || cn_usage_error cn-doctor "--workspace is not a report; use cn-setup --workspace"
+  case "$workspace" in terminal|vscode) ;; *) cn_usage_error cn-setup "--workspace needs terminal or vscode" ;; esac
+fi
 load_config
+# --workspace: where cn-new-agent continues after the clone (the codenow-new-agent skill reads CN_WORKSPACE).
+if [ -n "$workspace" ]; then
+  save_setting CN_WORKSPACE "$workspace"
+  say "CN_WORKSPACE=$workspace saved in $CODENOW_CONFIG"
+  exit 0
+fi
 credentials="$CODENOW_HOME/credentials"
 if [ "$forget" = 1 ]; then
   if [ -f "$credentials" ]; then rm -f "$credentials"; say "removed the API key ($credentials)"
