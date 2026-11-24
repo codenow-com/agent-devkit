@@ -9,7 +9,7 @@ cn_usage_line() {
     cn-call) echo "usage: cn-call <tool> [<json object of arguments>]" ;;
     cn-doctor) echo "usage: cn-doctor [--skip-gateway | --only-gateway]" ;;
     cn-new-agent) echo "usage: cn-new-agent [--with claude|codex|copilot]" ;;
-    cn-sandbox) echo "usage: cn-sandbox up|run|logs|events|status|down|token [args]" ;;
+    cn-sandbox) echo "usage: cn-sandbox up [--as-me]|down|run|logs|events|status|token|as-me [args]" ;;
     cn-setup) echo "usage: cn-setup [--check] [--forget-key] [--skip-gateway | --only-gateway]" ;;
     cn-update) echo "usage: cn-update" ;;
     cn-wait) echo "usage: cn-wait build|deploy <swarm> <agent|environment> [build id] [--max <s>]" ;;
@@ -114,7 +114,7 @@ OPTIONS
 ENVIRONMENT
     CODENOW_MCP_URL, KUBECONFIG_FILE, CODENOW_API_KEY, CODENOW_MCP_NAME,
     CODENOW_AGW_URL, CODENOW_IAM_ISSUER, CODENOW_AGW_CLIENT_ID,
-    CN_OIDC_ACCOUNT, OIDC_CONFIG_DIR, CODENOW_HOME
+    CODENOW_WORKFORCE_URL, CN_OIDC_ACCOUNT, OIDC_CONFIG_DIR, CODENOW_HOME
         As for cn-setup(1).
 
 FILES
@@ -182,7 +182,8 @@ NAME
     cn-sandbox - run the local sandbox of the agent repository you are in
 
 SYNOPSIS
-    cn-sandbox up | down | logs | events | status
+    cn-sandbox up [--as-me] | down | logs | events | status
+    cn-sandbox as-me off | status
     cn-sandbox run <pipeline> [subject] [json]
     cn-sandbox token [--watch | --stop]
     cn-sandbox <other sandbox.sh command> [args]
@@ -199,6 +200,18 @@ DESCRIPTION
 OPTIONS
     up       Start the sandbox. In developer mode it first writes your
              token and starts `token --watch' in the background.
+    up --as-me
+             Run the agent as yourself: check that requirements.txt pins
+             codenow-agent-sdk 2.24.0 or newer (an older pin: ask to raise
+             that line), write the developer identity block into the
+             agent's .env (client and Workforce URL from cn-setup
+             --only-gateway, WORKFORCE_MODE=shadow), then `up'. Other
+             lines of .env stay; a key of the block set outside it with
+             another value stops it.
+    as-me off
+             Remove the block from .env and stop the token refresh.
+    as-me status
+             Show the block and the values stored by cn-setup.
     down     Stop the sandbox, and the background token refresh.
     token    Write your own access token (oidc-agent) to the token file,
              once. Any other `token ...' (e.g. `token person <name>') goes
@@ -221,7 +234,10 @@ ENVIRONMENT
     CODENOW_HOME               the settings folder (default ~/.codenow)
 
 FILES
-    sandbox/sandbox.sh, .env   in the agent repository
+    sandbox/sandbox.sh, .env, requirements.txt
+                               in the agent repository
+    ~/.codenow/config          CODENOW_AGW_CLIENT_ID and
+                               CODENOW_WORKFORCE_URL (cn-setup)
     ~/.codenow/sandbox-token/token
         The token (mode 600, folder 700); never inside a repository.
     ~/.codenow/sandbox-token/watch.pid, watch.log
@@ -230,11 +246,16 @@ FILES
 EXIT STATUS
     The exit status of sandbox.sh for the commands it runs.
     0    token written, or refresh stopped
-    1    not in a git repository, no sandbox/sandbox.sh, or no token
+    1    not in a git repository, no sandbox/sandbox.sh, or no token;
+         up --as-me: no client, an old SDK pin, or a line in .env that
+         conflicts with the block
+    2    wrong arguments (as-me without off or status)
     token --watch runs until it is stopped.
 
 EXAMPLES
     cn-sandbox up
+    cn-sandbox up --as-me
+    cn-sandbox as-me off
     cn-sandbox run <pipeline>
     cn-sandbox token --watch
     cn-sandbox down
@@ -258,7 +279,8 @@ DESCRIPTION
     Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit
     skills into them and checks the kubeconfig and the CodeNOW Agent SDK
     index of pip. Asks once for the MCP URL and the kubeconfig path, then
-    offers the optional developer identity (agent gateway, oidc-agent).
+    offers the optional developer identity (agent gateway, oidc-agent)
+    and the Workforce (observer) URL for local agents.
     It never stores a token in ~/.codenow/config.
 
 OPTIONS
@@ -283,6 +305,10 @@ ENVIRONMENT
                            cn-wait, Codex and Copilot CLI
     CODENOW_AGW_URL, CODENOW_IAM_ISSUER, CODENOW_AGW_CLIENT_ID
                            the agent gateway values of the identity step
+    CODENOW_WORKFORCE_URL  the Workforce (observer) URL for local agents
+                           (cn-sandbox up --as-me); optional. Found
+                           through the CodeNOW MCP server, else asked
+                           once (Enter skips)
     CN_OIDC_ACCOUNT        the oidc-agent account (default cn-agw)
     OIDC_CONFIG_DIR        the oidc-agent folder
     CODENOW_HOME           the settings folder (default ~/.codenow)

@@ -319,6 +319,64 @@ print(", ".join(str(m.get("id")) for m in json.load(open(sys.argv[1])).get("data
   return "$ok"
 }
 
+# 7. The Workforce (swarm observer) URL for local agents (cn-sandbox up --as-me): optional. Found through the
+# CodeNOW MCP server (read tools only) with the developer's token, else with the API key of cn-call; else asked once.
+# gw_observers: "<url> <swarm>/<agent>" per observer found; nothing when none or the lookup fails (reason on stderr).
+gw_observers() {
+  local token out=""
+  [ -n "${CODENOW_MCP_URL:-}" ] || return 0
+  if have oidc-token && token="$(oidc-token --time=120 "$(gw_account)" 2>/dev/null </dev/null)" && [ -n "$token" ]; then
+    if out="$(printf '%s' "$token" | CN_MCP_BEARER_STDIN=1 python3 -I "$DEVKIT_DIR/lib/cn_observers.py" 2>&1)"; then
+      token=""; printf '%s\n' "$out"; return 0
+    fi
+    say "Workforce lookup with your token failed: ${out:0:200}" >&2
+  fi
+  token=""
+  if [ -n "${CODENOW_API_KEY:-}" ] || [ -f "$CODENOW_HOME/credentials" ]; then
+    if out="$(python3 -I "$DEVKIT_DIR/lib/cn_observers.py" 2>&1)"; then printf '%s\n' "$out"; return 0; fi
+    say "Workforce lookup with the API key failed: ${out:0:200}" >&2
+  fi
+  return 0
+}
+
+gw_workforce_url() {
+  local found count answer="" default=""
+  if [ -n "${CODENOW_WORKFORCE_URL:-}" ]; then
+    say "Workforce (observer) URL for local agents: $CODENOW_WORKFORCE_URL"; return 0
+  fi
+  found="$(gw_observers | grep -E '^https?://[^ ]+ ' || true)"
+  count="$(printf '%s' "$found" | grep -c . || true)"
+  if [ "$count" = 1 ]; then
+    default="${found%% *}"
+    say "found the swarm observer $(printf '%s' "$found" | cut -d' ' -f2): $default"
+  elif [ "$count" -gt 1 ]; then
+    say "found $count swarm observers:"
+    printf '%s\n' "$found" | awk '{ printf "  %d) %s  (%s)\n", NR, $1, $2 }'
+    interactive || { say "Workforce URL: not set (run cn-setup --only-gateway in a terminal to pick one)"; return 0; }
+    read -r -p "${CN_CMD:-cn}: which one for your local agents (number, Enter skips)? " answer || answer=""
+    case "$answer" in
+      ''|*[!0-9]*) ;;
+      *) default="$(printf '%s\n' "$found" | sed -n "${answer}p" | cut -d' ' -f1)" ;;
+    esac
+    [ -n "$default" ] || { say "Workforce URL: skipped (later: cn-setup --only-gateway)"; return 0; }
+    CODENOW_WORKFORCE_URL="$default"
+  else
+    say "no swarm observer found through the CodeNOW MCP server"
+  fi
+  [ -n "${CODENOW_WORKFORCE_URL:-}" ] \
+    || ask_default CODENOW_WORKFORCE_URL "Workforce (observer) URL for local agents (Enter skips):" "$default"
+  if [ -z "${CODENOW_WORKFORCE_URL:-}" ]; then
+    say "Workforce URL: not set; a local agent does not appear in Workforce (later: cn-setup --only-gateway)"
+    return 0
+  fi
+  CODENOW_WORKFORCE_URL="${CODENOW_WORKFORCE_URL%/}"
+  if ! gw_url_ok "$CODENOW_WORKFORCE_URL"; then
+    note "Workforce URL must use https:// ($CODENOW_WORKFORCE_URL)"; unset CODENOW_WORKFORCE_URL; return 1
+  fi
+  save_setting CODENOW_WORKFORCE_URL "$CODENOW_WORKFORCE_URL"
+  say "Workforce (observer) URL for local agents: $CODENOW_WORKFORCE_URL"
+}
+
 # The setup step (cn-setup; cn-setup --only-gateway).
 gateway_step() {
   say "Developer identity (agent gateway): your own Keycloak token for the agent gateway, the CodeNOW MCP server and a local agent"
@@ -328,7 +386,8 @@ gateway_step() {
   gw_pkce || return 0
   gw_create_account || return 0
   gw_gateway_url || return 0
-  gw_check && say "developer identity: ready (a local agent: CN_IDENTITY_PROVIDER=developer, CN_IDENTITY_DEVELOPER_CLIENTS=$CODENOW_AGW_CLIENT_ID; cn-sandbox up)" || true
+  gw_check && say "developer identity: ready (a local agent under your identity: cn-sandbox up --as-me)" || true
+  gw_workforce_url || true
 }
 
 # The cn-doctor report: the stored values and the check; only the oidc-agent check when the step was never run.
@@ -342,4 +401,6 @@ gateway_report() {
   say "developer identity: issuer ${CODENOW_IAM_ISSUER:-<missing>}, client ${CODENOW_AGW_CLIENT_ID:-<missing>}, gateway $CODENOW_AGW_URL, account $(gw_account)"
   gw_oidc_agent || return 0
   gw_check || true
+  if [ -n "${CODENOW_WORKFORCE_URL:-}" ]; then say "Workforce (observer) URL for local agents: $CODENOW_WORKFORCE_URL"
+  else say "Workforce (observer) URL for local agents: not set (optional): cn-setup --only-gateway"; fi
 }

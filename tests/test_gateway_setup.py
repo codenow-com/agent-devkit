@@ -154,7 +154,12 @@ class GatewayStepTest(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout)
         self.assertIn(f"client {CLIENT}", out.stdout)
         self.assertIn("models claude-x, gpt-y", out.stdout)
-        bad = self.run_setup("--check", "--only-gateway", FAKE_AUD="https://other.example")
+        self.assertIn("Workforce (observer) URL for local agents: not set (optional)", out.stdout)
+        with open(self.home / ".codenow" / "config", "a") as config:
+            config.write("CODENOW_WORKFORCE_URL=https://observer.example\n")
+        out = self.run_setup("--check", "--only-gateway")
+        self.assertIn("Workforce (observer) URL for local agents: https://observer.example", out.stdout)
+        bad =self.run_setup("--check", "--only-gateway", FAKE_AUD="https://other.example")
         self.assertEqual(bad.returncode, 1)
         self.assertIn("lacks the gateway", bad.stdout)
 

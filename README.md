@@ -28,7 +28,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-setup` | Checks the tools, adds the CodeNOW MCP server of your tenant to Claude Code, Codex, Copilot CLI and VS Code Copilot Chat, installs the devkit skills into them and checks the kubeconfig. Asks once for the MCP URL and the kubeconfig path. Then offers the optional developer identity (below); `--skip-gateway` leaves it out, `--only-gateway` runs only it. |
 | `cn-doctor` | Reports what is there and what is missing, the developer identity included (`cn-doctor --only-gateway`: only that). Changes nothing. |
 | `cn-new-agent` | Starts your assistant with the `codenow-new-agent` skill: it asks what the agent does, creates its swarm and the agent from the newest template you pick (CodeNOW Agent SDK on LangChain, or Google ADK over A2A) and clones the repository. |
-| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. `cn-sandbox token [--watch]` writes your own access token for a local agent under your identity (below). |
+| `cn-sandbox` | Runs the local sandbox of the agent repository you are in: `up`, `run <pipeline>`, `logs`, `events`, `status`, `down`. `cn-sandbox up --as-me` runs the agent as yourself (below); `cn-sandbox token [--watch]` writes your own access token. |
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
@@ -83,31 +83,44 @@ After a reboot, load the account once: `oidc-add cn-agw`.
 | `oidc-gen`: `unauthorized_client` | The Keycloak client does not have the Device Authorization Grant on. |
 | TLS or certificate error | Put the local CA into the system trust store (oidc-agent). |
 
-## Run a local agent under your own identity
+## Run your local agent as yourself
 
 A local agent can run as you, with your own Keycloak access token, instead of a deployed agent's token. The agent then
 calls the AI gateway and Workforce as you; Workforce shows it as `--under-development-- <agent>`, owned by you, under
 your person in the org chart. Your person must be in the organisation, else Workforce refuses the agent.
 
-1. Set up the developer identity once: `cn-setup --only-gateway` (above). It creates the oidc-agent account `cn-agw`
-   against the public Keycloak client `<tenant>-<environment>-agent-gateway` (on the demo tenant
-   `demo-tenant-demo-environment-agent-gateway`). After a reboot, load it with `oidc-add cn-agw`.
-2. In the agent's `.env` (the demo tenant's values):
+1. Once per computer: `cn-setup --only-gateway` (above). It creates the oidc-agent account `cn-agw` against the
+   public Keycloak client `<tenant>-<environment>-agent-gateway` (on the demo tenant
+   `demo-tenant-demo-environment-agent-gateway`) and stores the Workforce (observer) URL for local agents,
+   `CODENOW_WORKFORCE_URL`. It finds the observer through the CodeNOW MCP server (agents made from the
+   `ai-swarm-observer` template whose URL answers): one is offered as the default, several are listed to pick from,
+   none is asked once (Enter skips). On the demo tenant the expected value is
+   `https://observer-nov18-observer-test.demo-environment.demo-tenant.codenow-test.com`. After a reboot, load the
+   account with `oidc-add cn-agw`.
+2. In the agent repository: `cn-sandbox up --as-me`. It checks that `requirements.txt` pins
+   `codenow-agent-sdk` 2.24.0 or newer (an older pin: it asks to raise that one line to the newest version of your pip
+   index; commit the change), writes this block into the agent's `.env` and starts the sandbox as in step 3:
 
    ```bash
+   # >>> cn-devkit: developer identity (cn-sandbox as-me off removes it)
    CN_IDENTITY_PROVIDER=developer
-   CN_IDENTITY_TOKEN_FILE=~/.codenow/sandbox-token/token
    CN_IDENTITY_DEVELOPER_CLIENTS=demo-tenant-demo-environment-agent-gateway
-   WORKFORCE_URL=https://<observer host>
+   WORKFORCE_URL=https://observer-nov18-observer-test.demo-environment.demo-tenant.codenow-test.com
    WORKFORCE_MODE=shadow
+   # <<< cn-devkit
    ```
 
-   Leave `AI_GATEWAY_REFRESH_TOKEN` empty: the agent refuses to start as you next to a deployed agent's token.
-   `WORKFORCE_MODE` is `off` by default; without `shadow` (or `enforce`) the agent declares nothing.
-3. `cn-sandbox up`. It writes the token (`oidc-token --time=120 cn-agw`) to the token file and starts
-   `cn-sandbox token --watch` in the background, which writes a fresh one every 45 s (pid and log in the token's
-   folder). `cn-sandbox down` stops it. Without the sandbox: `cn-sandbox token` once, or `cn-sandbox token --watch` in a
-   terminal of its own; `cn-sandbox token --stop` stops a background refresh.
+   Other lines of `.env` stay. A second run refreshes the block. When one of these keys is set outside the block with
+   another value, it stops and names the line to remove. Without a Workforce URL the two `WORKFORCE_*` lines are left
+   out and the agent does not appear in Workforce. Leave `AI_GATEWAY_REFRESH_TOKEN` empty: the agent refuses to start
+   as you next to a deployed agent's token.
+3. `cn-sandbox up` (also the second half of `up --as-me`) writes the token (`oidc-token --time=120 cn-agw`) to the
+   token file and starts `cn-sandbox token --watch` in the background, which writes a fresh one every 45 s (pid and log
+   in the token's folder). `cn-sandbox down` stops it. Without the sandbox: `cn-sandbox token` once, or
+   `cn-sandbox token --watch` in a terminal of its own; `cn-sandbox token --stop` stops a background refresh.
+
+`cn-sandbox as-me status` shows the block and the stored values; `cn-sandbox as-me off` removes the block and stops
+the token refresh. You can also write the four lines into `.env` by hand; `cn-sandbox up` then works the same.
 
 | Setting | Default | Meaning |
 |---|---|---|

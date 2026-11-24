@@ -142,8 +142,9 @@ def parse_answer(text, content_type, request_id):
 
 
 class Client:
-    def __init__(self, url, key, deadline=None):
+    def __init__(self, url, key, deadline=None, bearer=None):
         self.url, self.key, self.session, self.next_id, self.deadline = url, key, None, 1, deadline
+        self.bearer = bearer  # the developer's access token; sent instead of the API key
 
     def _timeout(self):
         if self.deadline is None:
@@ -154,7 +155,7 @@ class Client:
         return min(REQUEST_SECONDS, left)
 
     def _send(self, method, body=None, timeout=None):
-        headers = {"X-Codenow-Api-Key": self.key}
+        headers = {"Authorization": f"Bearer {self.bearer}"} if self.bearer else {"X-Codenow-Api-Key": self.key}
         if body is not None:
             headers.update({"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
         if self.session:
@@ -169,6 +170,8 @@ class Client:
             if 300 <= error.code < 400:
                 raise CnError(f"the CodeNOW MCP server answered with a redirect (HTTP {error.code}); cn-call does "
                               f"not follow redirects: check CODENOW_MCP_URL in ~/.codenow/config") from None
+            if error.code in (401, 403) and self.bearer:
+                raise CnError(f"the CodeNOW MCP server refused your access token (HTTP {error.code})") from None
             if error.code in (401, 403):
                 raise CnError(f"the CodeNOW MCP server refused the API key (HTTP {error.code}): "
                               f"run  CODENOW_API_KEY=<key> cn-setup") from None

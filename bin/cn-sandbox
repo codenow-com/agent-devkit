@@ -6,6 +6,8 @@
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
 #   cn-sandbox token --stop     stop the background refresh that `up` started
+#   cn-sandbox up --as-me       write the developer identity block into the agent's .env, then `up`
+#   cn-sandbox as-me off|status remove the block (and stop the refresh) | show it and the stored values
 #
 # With CN_IDENTITY_PROVIDER=developer (in the environment or the agent's .env) the agent runs under your own identity:
 # `up` writes the token and starts `token --watch` in the background, `down` stops it. Settings: CN_OIDC_ACCOUNT (the
@@ -20,7 +22,10 @@ self="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
 lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
 . "$lib/common.sh"
 . "$lib/sandbox_token.sh"
+. "$lib/gateway_setup.sh"   # interactive, ask_yes
+. "$lib/as_me.sh"
 CN_CMD=cn-sandbox
+note() { say "$*"; }
 
 root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 env_file=""
@@ -48,10 +53,32 @@ if [ "${1:-}" = token ]; then
 fi
 
 [ -n "$root" ] || { echo "cn-sandbox: not inside a git repository" >&2; exit 1; }
+if [ "${1:-}" = as-me ]; then
+  load_config
+  case "${2:-}" in
+    off)
+      asme_off "$env_file"
+      file="$(token_file_path "$env_file")"
+      if watch_alive "$file" >/dev/null; then watch_stop "$file"; fi
+      exit 0 ;;
+    status) asme_status "$env_file"; exit 0 ;;
+    *) cn_usage_error cn-sandbox "as-me needs off or status" ;;
+  esac
+fi
 [ -f "$root/sandbox/sandbox.sh" ] || { echo "cn-sandbox: $root has no sandbox/sandbox.sh (an agent from the CodeNOW Agent SDK template 1.1.0 or newer has one)" >&2; exit 1; }
 cd "$root"
 case "${1:-}" in
   up)
+    args=()
+    as_me=0
+    for arg in "$@"; do
+      if [ "$arg" = --as-me ]; then as_me=1; else args+=("$arg"); fi
+    done
+    set -- "${args[@]}"
+    if [ "$as_me" = 1 ]; then
+      load_config
+      asme_on "$root" "$env_file"
+    fi
     if developer_mode; then
       file="$(token_file_path "$env_file")"
       token_write "$file" || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
