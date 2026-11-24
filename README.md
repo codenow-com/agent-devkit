@@ -32,6 +32,7 @@ The installer clones the devkit into `~/.codenow/devkit` (the newest release tag
 | `cn-update` | Updates the devkit to its newest release and refreshes the skills. |
 | `cn-wait` | Waits for a CodeNOW build (`cn-wait build <swarm> <agent>`) or deployment (`cn-wait deploy <swarm> <environment>`) and prints each change. One run waits at most 50 s (`--max <s>` changes it), under the time limit that assistants put on a command. Needs the API key (below). Exit codes below. |
 | `cn-call` | Calls one CodeNOW MCP tool and prints its JSON: `cn-call agent_swarms_list`. The arguments are one JSON object. Needs the API key (below). |
+| `cn-<command> --help` | Every command has `--help` (or `-h`): its options, environment variables, files, exit codes and examples. It only prints. An unknown option exits with 2 (`cn-sandbox` passes it on to the agent's `sandbox.sh`). |
 
 Exit codes of `cn-wait` and `cn-call`:
 

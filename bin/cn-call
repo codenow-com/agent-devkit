@@ -7,4 +7,7 @@
 # The MCP URL comes from ~/.codenow/config, the API key from CODENOW_API_KEY or ~/.codenow/credentials (cn-setup).
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_first cn-call "$@"
+case "${1:-}" in -*) cn_usage_error cn-call "unknown option '$1'" ;; esac
 exec python3 -I "$(cd "$(dirname "$src")/.." && pwd)/lib/cn_mcp.py" call "$@"

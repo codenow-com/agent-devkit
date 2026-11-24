@@ -3,6 +3,9 @@
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-update "$@"
+[ "$#" = 0 ] || cn_usage_error cn-update "unknown argument '$1'"
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
 CN_CMD=cn-update
 

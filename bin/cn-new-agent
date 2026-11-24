@@ -7,11 +7,18 @@
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-new-agent "$@"
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
 CN_CMD=cn-new-agent
 
 with=""
-[ "${1:-}" = "--with" ] && with="${2:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --with) [ -n "${2:-}" ] || cn_usage_error cn-new-agent "--with needs claude, codex or copilot"; with="$2"; shift 2 ;;
+    *) cn_usage_error cn-new-agent "unknown option '$1'" ;;
+  esac
+done
 if [ -z "$with" ]; then
   for candidate in claude codex copilot; do have "$candidate" && { with="$candidate"; break; }; done
 fi

@@ -2,4 +2,6 @@
 # cn-doctor: report what this computer has and lacks for developing CodeNOW agents. Changes nothing.
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-doctor "$@"
 exec bash "$(cd "$(dirname "$src")" && pwd)/cn-setup" --check "$@"

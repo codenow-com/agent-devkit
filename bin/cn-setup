@@ -13,6 +13,8 @@
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_any cn-setup "$@"
 . "$(cd "$(dirname "$src")/.." && pwd)/lib/common.sh"
 . "$DEVKIT_DIR/lib/sandbox_token.sh"
 . "$DEVKIT_DIR/lib/gateway_setup.sh"
@@ -26,7 +28,7 @@ for arg in "$@"; do
     --forget-key) forget=1 ;;
     --skip-gateway) gateway=skip ;;
     --only-gateway) gateway=only ;;
-    *) die "unknown option $arg (use --check, --forget-key, --skip-gateway or --only-gateway)" ;;
+    *) cn_usage_error "$CN_CMD" "unknown option '$arg'" ;;
   esac
 done
 load_config

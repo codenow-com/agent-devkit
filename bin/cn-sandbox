@@ -14,6 +14,8 @@
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
+. "$(cd "$(dirname "$src")/.." && pwd)/lib/help.sh"
+cn_help_first cn-sandbox "$@"
 self="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
 lib="$(cd "$(dirname "$src")/.." && pwd)/lib"
 . "$lib/common.sh"
