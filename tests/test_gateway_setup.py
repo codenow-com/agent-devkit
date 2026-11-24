@@ -109,8 +109,9 @@ class GatewayStepTest(unittest.TestCase):
         return (self.home / ".codenow" / "config").read_text()
 
     def first_run(self):
-        # issuer: Enter takes the one from the metadata; client id; gateway URL; profile y; PKCE y; account y; password
-        return self.run_setup("--only-gateway", answers=f"\n{CLIENT}\n{self.base}/\ny\ny\ny\n{PASSWORD}\n")
+        # issuer: Enter takes the one from the metadata; client id (no tenant in a 127.0.0.1 MCP URL); profile y;
+        # PKCE y; account y; password. The gateway URL is never asked: it comes from the token's audience.
+        return self.run_setup("--only-gateway", answers=f"\n{CLIENT}\ny\ny\ny\n{PASSWORD}\n")
 
     def test_the_first_run_sets_everything_up_and_checks_it(self):
         out = self.first_run()
@@ -180,10 +181,10 @@ class GatewayStepTest(unittest.TestCase):
     def test_without_a_terminal_and_without_values_it_says_what_is_missing(self):
         out = self.run_setup("--only-gateway")
         self.assertEqual(out.returncode, 1)
-        self.assertIn("missing CODENOW_AGW_CLIENT_ID CODENOW_AGW_URL", out.stdout)
+        self.assertIn("missing CODENOW_AGW_CLIENT_ID", out.stdout)
 
     def test_answering_no_changes_no_file(self):
-        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\n{self.base}\nn\nn\n")
+        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\nn\nn\n")
         self.assertEqual(out.returncode, 1)
         self.assertFalse((self.home / ".zshrc").exists())
         self.assertFalse((self.home / ".config" / "oidc-agent").exists())
@@ -199,13 +200,13 @@ class GatewayStepTest(unittest.TestCase):
         self.assertEqual(len(entries), 4)
 
     def test_an_old_oidc_agent_stops_the_step(self):
-        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\n{self.base}\n", FAKE_VERSION="5.1.0")
+        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\n", FAKE_VERSION="5.1.0")
         self.assertEqual(out.returncode, 1)
         self.assertIn("older than 5.2.0", out.stdout)
 
     def test_a_missing_oidc_agent_is_installed_only_with_consent_on_macos(self):
         (self.bin / "oidc-agent").unlink()
-        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\n{self.base}\nn\n")
+        out = self.run_setup("--only-gateway", answers=f"\n{CLIENT}\nn\n")
         self.assertIn("oidc-agent is missing", out.stdout)
         self.assertFalse((self.state / "brew.log").exists())
 
@@ -215,6 +216,21 @@ class GatewayStepTest(unittest.TestCase):
         out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30)
         self.assertEqual(out.stdout, "demo-tenant")
         self.assertNotEqual(self.run_setup("--bogus").returncode, 0)
+
+    def test_the_environment_is_typed_once_and_gives_the_client(self):
+        # Petr's report: environment, client and URL were three prompts with "demo-environment" typed three times.
+        script = (f'. "{ROOT}/lib/common.sh"; . "{ROOT}/lib/sandbox_token.sh"; . "{ROOT}/lib/gateway_setup.sh"; '
+                  'CODENOW_MCP_URL=https://mcp-server-demo-tenant.stxcn.codenow.com/mcp; '
+                  f'CODENOW_IAM_ISSUER={ISSUER}; gw_values')
+        out = subprocess.run(["bash", "-c", script], input="demo-environment\n", capture_output=True, text=True,
+                             timeout=30, env={**self.env, "CN_SETUP_INTERACTIVE": "1"})
+        text = out.stdout + out.stderr
+        self.assertEqual(out.returncode, 0, text)
+        # (read -p shows its prompt only on a terminal; one answer line was enough for the whole step)
+        self.assertNotIn("Keycloak client of the agent gateway (e.g.", text)   # not asked: derived
+        self.assertNotIn("agent gateway URL (", text)                          # not asked: from the token later
+        self.assertIn("Keycloak client of the agent gateway: demo-tenant-demo-environment-agent-gateway", text)
+        self.assertIn("CODENOW_AGW_CLIENT_ID=demo-tenant-demo-environment-agent-gateway", self.config())
 
 
 if __name__ == "__main__":

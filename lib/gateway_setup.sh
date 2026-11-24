@@ -106,22 +106,41 @@ gw_values() {
   fi
   ask_default CODENOW_IAM_ISSUER "IAM issuer (https://<iam host>/auth/realms/<realm>):" "$found"
   tenant="$(gw_tenant)"
+  # One question: the environment. The client follows from it (<tenant>-<environment>-agent-gateway); the gateway URL
+  # comes later from the token's audience (gw_gateway_url), so it is never typed.
   if [ -z "${CODENOW_AGW_CLIENT_ID:-}" ] && [ -n "$tenant" ] && interactive; then
     read -r -p "${CN_CMD:-cn}: environment of your agent gateway (e.g. demo-environment): " environment || environment=""
-    [ -z "$environment" ] || client_default="$tenant-$environment-agent-gateway"
+    if [ -n "$environment" ]; then
+      CODENOW_AGW_CLIENT_ID="$tenant-$environment-agent-gateway"
+      say "Keycloak client of the agent gateway: $CODENOW_AGW_CLIENT_ID"
+      save_setting CODENOW_AGW_CLIENT_ID "$CODENOW_AGW_CLIENT_ID"
+    fi
   fi
-  ask_default CODENOW_AGW_CLIENT_ID "Keycloak client of the agent gateway (<tenant>-<environment>-agent-gateway):" \
+  ask_default CODENOW_AGW_CLIENT_ID "Keycloak client of the agent gateway (e.g. <tenant>-<environment>-agent-gateway):" \
     "$client_default"
-  ask_default CODENOW_AGW_URL \
-    "agent gateway URL (https://agent-gateway.${environment:-<environment>}.${tenant:-<tenant>}.<domain>):" ""
-  if [ -n "${CODENOW_AGW_URL:-}" ]; then CODENOW_AGW_URL="${CODENOW_AGW_URL%/}"; save_setting CODENOW_AGW_URL "$CODENOW_AGW_URL"; fi
   local missing="" name
-  for name in CODENOW_IAM_ISSUER CODENOW_AGW_CLIENT_ID CODENOW_AGW_URL; do [ -n "${!name:-}" ] || missing="$missing $name"; done
+  for name in CODENOW_IAM_ISSUER CODENOW_AGW_CLIENT_ID; do [ -n "${!name:-}" ] || missing="$missing $name"; done
   if [ -n "$missing" ]; then note "developer identity: missing$missing (run cn-setup --only-gateway in a terminal)"; return 1; fi
-  for name in CODENOW_IAM_ISSUER CODENOW_AGW_URL; do
-    gw_url_ok "${!name}" || { note "developer identity: $name must use https:// (${!name})"; return 1; }
-  done
-  say "developer identity: issuer $CODENOW_IAM_ISSUER, client $CODENOW_AGW_CLIENT_ID, gateway $CODENOW_AGW_URL, account $CN_OIDC_ACCOUNT"
+  gw_url_ok "$CODENOW_IAM_ISSUER" || { note "developer identity: CODENOW_IAM_ISSUER must use https:// ($CODENOW_IAM_ISSUER)"; return 1; }
+  say "developer identity: issuer $CODENOW_IAM_ISSUER, client $CODENOW_AGW_CLIENT_ID, gateway ${CODENOW_AGW_URL:-<from your token after the login>}, account $CN_OIDC_ACCOUNT"
+}
+
+# 5b. The gateway URL: the token's gateway audience once the account exists; asked only when that fails.
+gw_gateway_url() {
+  local from_token iss azp aud
+  if [ -z "${CODENOW_AGW_URL:-}" ]; then
+    from_token="$(gw_from_token || true)"
+    if [ -n "$from_token" ]; then
+      read -r iss azp aud <<<"$from_token"
+      CODENOW_AGW_URL="$aud"
+      say "agent gateway URL from your token: $CODENOW_AGW_URL"
+    fi
+  fi
+  ask_default CODENOW_AGW_URL "agent gateway URL (https://agent-gateway.<environment>.<tenant>.<domain>):" ""
+  [ -n "${CODENOW_AGW_URL:-}" ] || { note "developer identity: missing CODENOW_AGW_URL (run cn-setup --only-gateway in a terminal)"; return 1; }
+  CODENOW_AGW_URL="${CODENOW_AGW_URL%/}"
+  gw_url_ok "$CODENOW_AGW_URL" || { note "developer identity: CODENOW_AGW_URL must use https:// ($CODENOW_AGW_URL)"; return 1; }
+  [ -n "${GW_REPORT:-}" ] || save_setting CODENOW_AGW_URL "$CODENOW_AGW_URL"
 }
 
 # 2. oidc-agent 5.2.0 or newer; installed with consent on macOS (brew), never with sudo.
@@ -308,6 +327,7 @@ gateway_step() {
   gw_profile
   gw_pkce || return 0
   gw_create_account || return 0
+  gw_gateway_url || return 0
   gw_check && say "developer identity: ready (a local agent: CN_IDENTITY_PROVIDER=developer, CN_IDENTITY_DEVELOPER_CLIENTS=$CODENOW_AGW_CLIENT_ID; cn-sandbox up)" || true
 }
 
