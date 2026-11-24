@@ -7,7 +7,8 @@
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
 #   cn-sandbox token --stop     stop the background refresh that `up` started, for every sandbox
-#   cn-sandbox up --as-me       write the developer identity block into the agent's .env, then `up`
+#   cn-sandbox up --as-me       write the developer identity block into the agent's .env, then `up` (also before the
+#                               agent's first deployment: the console login is then the local dev identity provider)
 #   cn-sandbox as-me off|status remove the block (and stop the refresh) | show it and the stored values
 #   cn-sandbox hub [--stop|--status]  the page with every sandbox on this computer (http://localhost:8079/)
 #
@@ -95,6 +96,7 @@ case "${1:-}" in
       file="$(token_file_path "$env_file")"
       token_write "$file" || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
       export CN_IDENTITY_TOKEN_FILE="$file"   # the sandbox copies the token from here
+      asme_predeploy_env   # before the first deployment the sandbox takes the gateway from these
       token_share_start "$file" "$root" "$(asme_project "$root")" "$self"
     fi
     rc=0; bash sandbox/sandbox.sh "$@" || rc=$?

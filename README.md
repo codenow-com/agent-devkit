@@ -148,6 +148,13 @@ your person in the org chart. Your person must be in the organisation, else Work
 the token refresh when no other sandbox uses it. You can also write the four lines into `.env` by hand; `cn-sandbox up`
 then works the same. While the block is in `.env`, a plain `cn-sandbox up` also runs the agent as you.
 
+Before the agent's first deployment `cn-sandbox up --as-me` works too (an agent template newer than 1.7.0): the sandbox
+takes the agent gateway from `CODENOW_AGW_URL` (cn-setup passes it and `CODENOW_IAM_ISSUER` on) and starts the local
+dev identity provider for the console login only, signed in as you. It prints
+`sandbox: agent not deployed yet: console login is local (dev IdP, as <you>); models and Workforce use your own token`;
+`cn-sandbox status` says `console login: local dev IdP (not deployed yet)` and the hub shows a `pre-deploy` chip. The
+next `up` after the first deployment uses the agent's own console client.
+
 ### Several agents at once
 
 You can run the sandboxes of several agent repositories at the same time: each one is its own compose project, and
@@ -163,6 +170,7 @@ status of the agent's `sandbox.sh`:
 ```text
 cn-sandbox: identity: developer (demo-tenant, client demo-tenant-demo-environment-agent-gateway)
 cn-sandbox: Workforce: onboarding approved (instance dev-..., mode shadow)
+cn-sandbox: console login: agent's own client
 cn-sandbox: console: http://localhost:8080/ (log in on localhost, not on 127.0.0.1)
 ```
 

@@ -256,12 +256,17 @@ OPTIONS
              --only-gateway, WORKFORCE_MODE=shadow), then `up'. Other
              lines of .env stay. An empty KEY= line of a key of the block
              outside it is removed (each removed line is named); a
-             non-empty other value stops it.
+             non-empty other value stops it. Also before the agent's
+             first deployment: then the sandbox takes the gateway from
+             CODENOW_AGW_URL and the console login is the local dev
+             identity provider, signed in as you (template after 1.7.0).
     status   Print the identity the running agent uses (from its log):
              developer (tenant, client), deployment token, or unknown
-             (agent not running); its last Workforce onboarding line; and
-             the console URL; in developer mode also `token refresh:
-             running for N sandbox(es)' or `not running'. Then the status
+             (agent not running); its last Workforce onboarding line; the
+             console login (local dev IdP before the first deployment, or
+             the agent's own client); and the console URL; in developer
+             mode also `token refresh: running for N sandbox(es)' or `not
+             running'. Then the status
              of the agent's sandbox.sh. Never prints a token.
     as-me off
              Remove the block from .env and stop the token refresh when

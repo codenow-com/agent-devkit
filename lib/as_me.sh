@@ -170,6 +170,29 @@ asme_status() {
   say "stored (~/.codenow/config): client ${CODENOW_AGW_CLIENT_ID:-<not set>}, Workforce ${CODENOW_WORKFORCE_URL:-<not set>}"
 }
 
+# asme_predeploy_env: before the agent's first deployment its sandbox.sh (a template newer than 1.7.0) takes the agent gateway
+# and the IAM issuer from CODENOW_AGW_URL and CODENOW_IAM_ISSUER (cn-setup --only-gateway); pass the stored values on.
+asme_predeploy_env() {
+  local name
+  for name in CODENOW_AGW_URL CODENOW_IAM_ISSUER; do
+    if [ -z "${!name:-}" ] && [ -f "${CODENOW_CONFIG:-}" ]; then
+      # the devkit's own file (save_setting writes it with printf %q): read as load_config does, in a subshell
+      printf -v "$name" '%s' "$( . "$CODENOW_CONFIG" >/dev/null 2>&1; printf '%s' "${!name:-}")"
+    fi
+    [ -z "${!name:-}" ] || export "$name"
+  done
+}
+
+# asme_console_login <repo>: whose client the console login uses. sandbox.sh writes sandbox/.run/predeploy when the
+# agent runs before its first deployment (the local dev identity provider signs in as the developer).
+asme_console_login() {
+  if [ -f "$1/sandbox/.run/predeploy" ]; then
+    say "console login: local dev IdP (not deployed yet)"
+  else
+    say "console login: agent's own client"
+  fi
+}
+
 # asme_env_value <env file> <KEY>: the last value of KEY in the file, without surrounding quotes; empty when missing.
 asme_env_value() {
   [ -f "$1" ] || return 0
@@ -218,5 +241,6 @@ asme_identity() {
   workforce="$(printf '%s\n' "$log" | grep -E 'Workforce: (onboarding|declaration) ' | tail -n 1 \
     | sed 's/.*Workforce: /Workforce: /' || true)"
   [ -z "$workforce" ] || say "$workforce"
+  asme_console_login "$repo"
   say "console: $(asme_console "$repo") (log in on localhost, not on 127.0.0.1)"
 }

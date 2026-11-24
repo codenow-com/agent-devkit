@@ -263,6 +263,8 @@ def one_sandbox(project: str, containers: list, docker, refresh: dict) -> dict:
         "services": [{"name": s, **services[s]} for s in order],
         "console": {"host": host, "port": port, "url": f"http://localhost:{port}/" if port else None},
         "identity": identity_of(log, env),
+        # sandbox.sh writes sandbox/.run/predeploy while the agent runs before its first deployment
+        "predeploy": bool(working_dir) and (repo / "sandbox" / ".run" / "predeploy").is_file(),
         "workforce": workforce,
         "egress": [{"host": h, "kind": host_kind(h, workforce["url_host"] or "")} for h in allow],
         "token_refresh": {**{k: v for k, v in refresh.items() if k != "projects"},

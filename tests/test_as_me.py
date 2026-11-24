@@ -28,7 +28,8 @@ fi
 exec "$REAL_PYTHON" "$@"
 """
 SANDBOX_STUB = """#!/usr/bin/env bash
-echo "sandbox.sh $* file=${CN_IDENTITY_TOKEN_FILE:-}" >> "$FAKE_STATE/sandbox.log"
+echo "sandbox.sh $* file=${CN_IDENTITY_TOKEN_FILE:-} agw=${CODENOW_AGW_URL:-} iam=${CODENOW_IAM_ISSUER:-}" \\
+  >> "$FAKE_STATE/sandbox.log"
 """
 # docker ps -q --filter label=...project=<p> --filter label=...service=agent: the id when $FAKE_STATE/agent.log exists
 # and the project is the one of the repository "agent"; docker logs <id>: that log.
@@ -187,13 +188,13 @@ class AsMeTest(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         log = (self.state / "sandbox.log").read_text()
         self.assertIn("sandbox.sh up file=", log)
-        self.assertNotIn("file=\n", log)                     # the token file is passed: developer mode
+        self.assertNotIn("file= ", log)                     # the token file is passed: developer mode
 
     def test_up_as_me_after_a_plain_up_and_down(self):
         self.env_file("A=1\nWORKFORCE_URL=\n")
         out = self.run_cn("up")
         self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertIn("sandbox.sh up file=\n", (self.state / "sandbox.log").read_text())   # deployment token
+        self.assertIn("sandbox.sh up file= ", (self.state / "sandbox.log").read_text())   # deployment token
         self.assertEqual(self.run_cn("down").returncode, 0)
         out = self.run_cn("up", "--as-me")
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
@@ -220,6 +221,34 @@ class AsMeTest(unittest.TestCase):
         self.assertNotIn("SECRETSIG", out.stdout + out.stderr)
         self.assertNotIn("eyJ", out.stdout + out.stderr)
         self.assertTrue((self.state / "sandbox.log").read_text().splitlines()[-1].startswith("sandbox.sh status"))
+
+    def test_up_as_me_passes_the_gateway_and_iam_for_the_pre_deploy_sandbox(self):
+        self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_WORKFORCE_URL={OBSERVER}\n"
+                      "CODENOW_AGW_URL=https://agent-gateway.example\n"
+                      "CODENOW_IAM_ISSUER=https://iam.example/auth/realms/codenow\n")
+        out = self.run_cn("up", "--as-me")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("agw=https://agent-gateway.example iam=https://iam.example/auth/realms/codenow",
+                      (self.state / "sandbox.log").read_text())
+
+    def test_plain_up_without_developer_mode_passes_no_gateway(self):
+        self.settings(f"CODENOW_AGW_CLIENT_ID={CLIENT}\nCODENOW_AGW_URL=https://agent-gateway.example\n")
+        out = self.run_cn("up")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("agw= iam=", (self.state / "sandbox.log").read_text())
+
+    def test_status_names_the_local_console_login_before_the_first_deployment(self):
+        self.env_file("A=1\n")
+        self.run_cn("up", "--as-me")
+        (self.state / "agent.log").write_text(DEV_LOG)
+        (self.repo / "sandbox" / ".run").mkdir()
+        (self.repo / "sandbox" / ".run" / "predeploy").write_text("user=demotenant\n")
+        out = self.run_cn("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("cn-sandbox: console login: local dev IdP (not deployed yet)\n", out.stdout)
+        (self.repo / "sandbox" / ".run" / "predeploy").unlink()
+        out = self.run_cn("status")
+        self.assertIn("cn-sandbox: console login: agent's own client\n", out.stdout)
 
     def test_status_deployment_token(self):
         (self.state / "agent.log").write_text(LEGACY_LOG)

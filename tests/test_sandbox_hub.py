@@ -135,6 +135,15 @@ class CollectorTest(unittest.TestCase):
         self.assertNotIn("projects", data["alpha"]["token_refresh"])
         self.assertIn("used by 1 sandbox(es)", cn_hub_render.card(data["alpha"], False))
 
+    def test_the_pre_deploy_marker_shows_a_chip(self):
+        self.assertFalse(self.data["alpha"]["predeploy"])
+        self.assertNotIn(">pre-deploy</span>", cn_hub_render.card(self.data["alpha"], False))
+        (self.tmp / "alpha" / "sandbox" / ".run" / "predeploy").write_text("user=demotenant\n")
+        data = {sb["name"]: sb for sb in cn_hub.collect(self.docker, self.home)}
+        self.assertTrue(data["alpha"]["predeploy"])
+        self.assertFalse(data["beta"]["predeploy"])
+        self.assertIn('class="chip warn">pre-deploy</span>', cn_hub_render.card(data["alpha"], False))
+
     def test_no_token_or_secret_in_the_json_or_the_page(self):
         sandboxes = list(self.data.values())
         for text in (json.dumps(sandboxes), cn_hub_render.page(sandboxes)):

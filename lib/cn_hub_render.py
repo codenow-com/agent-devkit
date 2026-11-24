@@ -111,6 +111,10 @@ def identity_chip(identity: dict) -> str:
     return chip((identity or {}).get("label") or "identity unknown", "muted")
 
 
+def predeploy_chip(sb: dict) -> str:
+    return chip("pre-deploy", "warn") if sb.get("predeploy") else ""
+
+
 def workforce_chip(workforce: dict) -> str:
     state = (workforce or {}).get("state") or "unknown"
     tone = {"approved": "ok", "pending": "warn", "rejected": "bad", "offboarded": "bad"}.get(state, "muted")
@@ -164,7 +168,7 @@ def card(sb: dict, open_diagram: bool) -> str:
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     return (f'<article class="card {e(status)}" id="sb-{e(name)}">'
             f'<header><h2>{e(name)}</h2>{status_chip(status)}{identity_chip(sb.get("identity"))}'
-            f'{workforce_chip(workforce)}</header>'
+            f'{predeploy_chip(sb)}{workforce_chip(workforce)}</header>'
             f'<p class="repo">{e(sb.get("repo") or "")}</p>{reach}<dl>{facts}</dl>'
             f'<details data-key="{e(name)}"{" open" if open_diagram else ""}>'
             f'<summary>How this sandbox is connected</summary>{diagram(sb)}</details></article>')
@@ -182,6 +186,8 @@ LEGEND = """<section class="legend" aria-label="Legend">
 <li><span class="chip ok">as you (developer)</span> the agent calls with your own token
 (<code>cn-sandbox up --as-me</code>); <span class="chip warn">deployment token</span> it uses the agent's own
 refresh token from <code>.env</code>.</li>
+<li><span class="chip warn">pre-deploy</span> the agent is not deployed yet: the console login is the local dev
+identity provider (signed in as you); models and Workforce use your own token.</li>
 <li><span class="chip ok">Workforce: approved</span> the observer approved this instance; other states show as
 the agent logged them.</li>
 <li>Dashed areas are the sandbox's Docker networks: <b>inner</b> has no route out; <b>outer</b> is reached only
