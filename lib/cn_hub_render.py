@@ -168,7 +168,8 @@ def card(sb: dict, open_diagram: bool) -> str:
     if project:
         base = "/s/" + quote(project, safe="")
         rows.append(("data", f'<a href="{e(base)}/runs">Runs</a> · <a href="{e(base)}/valkey">Valkey</a> · '
-                             f'<a href="{e(base)}/search">Search</a> <span class="muted">(read only)</span>'))
+                             f'<a href="{e(base)}/search">Search</a> <span class="muted">(read only)</span> · '
+                             f'<a href="{e(base)}/try">Try it</a> <span class="muted">(sends A2A)</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     return (f'<article class="card {e(status)}" id="sb-{e(name)}">'
             f'<header><h2>{e(name)}</h2>{status_chip(status)}{identity_chip(sb.get("identity"), sb.get("identity_mode"))}'
