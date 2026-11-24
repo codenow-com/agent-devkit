@@ -102,6 +102,123 @@ watch_stop() {
   rm -f "$(watch_pid_file "$file")"
 }
 
+# One refresh loop serves every sandbox of this user (several agents can run at once, each on its own port). Each
+# agent repository that uses it has a file in <token folder>/users/: line 1 the repository, line 2 its compose
+# project, line 3 the time of `up`. `up` adds its repository and starts the loop when it is not running; `down` and
+# `as-me off` remove theirs and stop the loop only when no other sandbox is left. A mkdir lock (<token
+# folder>/users.lock; macOS has no flock) makes the check and the change one step.
+TOKEN_USER_GRACE="${CN_SANDBOX_TOKEN_GRACE:-300}"   # seconds an entry counts as alive: its sandbox may still start
+
+users_dir() { printf '%s/users' "$(dirname "$1")"; }
+user_key() { printf '%s' "$1" | cksum | cut -d' ' -f1; }
+
+# users_lock <file>: wait for the lock; a lock whose owner is gone, or one held for about 10 s, is taken over.
+users_lock() {
+  local lock tries=0 owner
+  lock="$(dirname "$1")/users.lock"
+  until mkdir "$lock" 2>/dev/null; do
+    owner="$(cat "$lock/pid" 2>/dev/null || true)"
+    tries=$((tries + 1))
+    if { [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; } || [ "$tries" -ge 100 ]; then
+      rm -rf "$lock"
+      tries=0
+      continue
+    fi
+    sleep 0.1
+  done
+  echo "$$" > "$lock/pid"
+}
+users_unlock() { rm -rf "$(dirname "$1")/users.lock"; }
+
+users_add() {
+  local dir
+  dir="$(users_dir "$1")"
+  ( umask 077; mkdir -p "$dir" )
+  printf '%s\n%s\n%s\n' "$2" "$3" "$(date +%s)" > "$dir/$(user_key "$2")"
+}
+users_remove() { rm -f "$(users_dir "$1")/$(user_key "$2")"; }
+
+# users_prune <file>: drop the entries whose repository is gone or whose compose project has no running container.
+# An entry younger than TOKEN_USER_GRACE stays, and so does every entry when docker does not answer.
+users_prune() {
+  local dir f repo project since now id
+  dir="$(users_dir "$1")"
+  [ -d "$dir" ] || return 0
+  now="$(date +%s)"
+  for f in "$dir"/*; do
+    [ -f "$f" ] || continue
+    repo="$(sed -n 1p "$f")"; project="$(sed -n 2p "$f")"; since="$(sed -n 3p "$f")"
+    case "$since" in ''|*[!0-9]*) since=0 ;; esac
+    if [ -n "$repo" ] && [ -d "$repo" ]; then
+      [ $((now - since)) -ge "$TOKEN_USER_GRACE" ] || continue
+      have docker || continue
+      id="$(docker ps -q --filter "label=com.docker.compose.project=$project" 2>/dev/null)" || continue
+      [ -z "$id" ] || continue
+    fi
+    rm -f "$f"
+    say "token refresh: no sandbox runs for ${repo:-an unknown repository}; removed from its list"
+  done
+}
+
+users_count() {
+  local dir f n=0
+  dir="$(users_dir "$1")"
+  if [ -d "$dir" ]; then
+    for f in "$dir"/*; do
+      if [ -f "$f" ]; then n=$((n + 1)); fi
+    done
+  fi
+  echo "$n"
+}
+
+# token_share_start <file> <repo> <project> <command>: add the repository; start the loop when it is not running.
+token_share_start() {
+  users_lock "$1"
+  users_add "$1" "$2" "$3"
+  watch_start "$1" "$4"
+  users_unlock "$1"
+}
+
+# token_share_stop <file> <repo>: remove the repository; stop the loop only when no other sandbox uses it.
+token_share_stop() {
+  local file="$1" n
+  [ -d "$(dirname "$file")" ] || return 0
+  users_lock "$file"
+  users_remove "$file" "$2"
+  users_prune "$file"
+  n="$(users_count "$file")"
+  if [ "$n" = 0 ]; then
+    if watch_alive "$file" >/dev/null; then watch_stop "$file"; fi
+  elif watch_alive "$file" >/dev/null; then
+    say "token refresh keeps running for $n other sandbox(es)"
+  fi
+  users_unlock "$file"
+}
+
+# token_share_clear <file>: `token --stop`: stop the loop whoever uses it, and empty the list.
+token_share_clear() {
+  local file="$1"
+  watch_stop "$file"
+  [ -d "$(dirname "$file")" ] || return 0
+  users_lock "$file"
+  rm -rf "$(users_dir "$file")"
+  users_unlock "$file"
+}
+
+# token_share_status <file>: "token refresh: running for N sandbox(es)" or "not running". Never prints the token.
+token_share_status() {
+  local file="$1" n
+  if [ -d "$(dirname "$file")" ] && watch_alive "$file" >/dev/null; then
+    users_lock "$file"
+    users_prune "$file"
+    n="$(users_count "$file")"
+    users_unlock "$file"
+    say "token refresh: running for $n sandbox(es)"
+  else
+    say "token refresh: not running"
+  fi
+}
+
 # oidc_check: cn-doctor's report on oidc-agent (prints; returns 1 when there is a problem). Optional tool: not
 # installed is no problem.
 oidc_check() {

@@ -121,12 +121,22 @@ your person in the org chart. Your person must be in the organisation, else Work
    as you next to a deployed agent's token.
 3. `cn-sandbox up` (also the second half of `up --as-me`) writes the token (`oidc-token --time=120 cn-agw`) to the
    token file and starts `cn-sandbox token --watch` in the background, which writes a fresh one every 45 s (pid and log
-   in the token's folder). `cn-sandbox down` stops it. Without the sandbox: `cn-sandbox token` once, or
-   `cn-sandbox token --watch` in a terminal of its own; `cn-sandbox token --stop` stops a background refresh.
+   in the token's folder). `cn-sandbox down` stops it when no other sandbox uses it. Without the sandbox:
+   `cn-sandbox token` once, or `cn-sandbox token --watch` in a terminal of its own; `cn-sandbox token --stop` stops a
+   background refresh.
 
 `cn-sandbox as-me status` shows the block and the stored values; `cn-sandbox as-me off` removes the block and stops
-the token refresh. You can also write the four lines into `.env` by hand; `cn-sandbox up` then works the same. While
-the block is in `.env`, a plain `cn-sandbox up` also runs the agent as you.
+the token refresh when no other sandbox uses it. You can also write the four lines into `.env` by hand; `cn-sandbox up`
+then works the same. While the block is in `.env`, a plain `cn-sandbox up` also runs the agent as you.
+
+### Several agents at once
+
+You can run the sandboxes of several agent repositories at the same time: each one is its own compose project, and
+its port is picked automatically. They share one token refresh. `cn-sandbox up` starts it once and lists the agent
+repository next to the token (`~/.codenow/sandbox-token/users/`); `cn-sandbox down` (or `as-me off`) stops it only
+in the last running sandbox. An entry whose sandbox has no running container (and that is older than
+`CN_SANDBOX_TOKEN_GRACE` seconds) is dropped. `cn-sandbox status` prints
+`token refresh: running for N sandbox(es)`; `cn-sandbox token --stop` stops the refresh for all of them.
 
 `cn-sandbox status` first says under which identity the running agent runs (from the agent's log), then shows the
 status of the agent's `sandbox.sh`:
@@ -153,6 +163,7 @@ Open the console on `http://localhost:<port>/`, as `cn-sandbox up` and `status` 
 | `CN_OIDC_ACCOUNT` | `cn-agw` | the oidc-agent account the token comes from |
 | `CN_IDENTITY_TOKEN_FILE` | `~/.codenow/sandbox-token/token` | the token file (mode 600, its folder 700); never in a repository or directly in your home folder |
 | `CN_SANDBOX_TOKEN_INTERVAL` | `45` | seconds between two refreshes of `--watch` |
+| `CN_SANDBOX_TOKEN_GRACE` | `300` | seconds a sandbox counts as using the refresh after its `up`, even without a running container |
 
 The token is a secret: it is never printed, and the sandbox mounts only its own copy of it.
 

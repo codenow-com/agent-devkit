@@ -208,9 +208,10 @@ OPTIONS
     up       Start the sandbox. In developer mode (CN_IDENTITY_PROVIDER=
              developer, e.g. the block of `up --as-me' in .env) it first
              writes your token and starts `token --watch' in the
-             background. Then it prints the console URL on localhost: the
-             login returns to localhost, so a login started on 127.0.0.1
-             fails.
+             background, unless it already runs for another sandbox: one
+             refresh serves every sandbox of yours. Then it prints the
+             console URL on localhost: the login returns to localhost, so a
+             login started on 127.0.0.1 fails.
     up --as-me
              Run the agent as yourself: check that requirements.txt pins
              codenow-agent-sdk 2.24.0 or newer (an older pin: ask to raise
@@ -223,13 +224,16 @@ OPTIONS
     status   Print the identity the running agent uses (from its log):
              developer (tenant, client), deployment token, or unknown
              (agent not running); its last Workforce onboarding line; and
-             the console URL. Then the status of the agent's sandbox.sh.
-             Never prints a token.
+             the console URL; in developer mode also `token refresh:
+             running for N sandbox(es)' or `not running'. Then the status
+             of the agent's sandbox.sh. Never prints a token.
     as-me off
-             Remove the block from .env and stop the token refresh.
+             Remove the block from .env and stop the token refresh when
+             no other sandbox uses it.
     as-me status
              Show the block and the values stored by cn-setup.
-    down     Stop the sandbox, and the background token refresh.
+    down     Stop the sandbox, and the background token refresh when no
+             other sandbox uses it.
     token    Write your own access token (oidc-agent) to the token file,
              once. Any other `token ...' (e.g. `token person <name>') goes
              to the agent's sandbox.sh.
@@ -237,7 +241,8 @@ OPTIONS
              The same every CN_SANDBOX_TOKEN_INTERVAL seconds until
              stopped.
     token --stop
-             Stop the background refresh that `up' started.
+             Stop the background refresh that `up' started, for every
+             sandbox, and empty its list of sandboxes.
     -h, --help
              Print this help and exit (only as the first argument).
 
@@ -248,6 +253,8 @@ ENVIRONMENT
     CN_IDENTITY_TOKEN_FILE     the token file, also read from the agent's
                                .env (default ~/.codenow/sandbox-token/token)
     CN_SANDBOX_TOKEN_INTERVAL  seconds between refreshes (default 45)
+    CN_SANDBOX_TOKEN_GRACE     seconds after `up' before a sandbox without a
+                               running container leaves the list (300)
     CODENOW_HOME               the settings folder (default ~/.codenow)
 
 FILES
@@ -259,6 +266,15 @@ FILES
         The token (mode 600, folder 700); never inside a repository.
     ~/.codenow/sandbox-token/watch.pid, watch.log
         The pid and log of the background refresh.
+    ~/.codenow/sandbox-token/users/
+        One file per agent repository that uses the refresh; an entry
+        whose sandbox has no running container is removed.
+
+SEVERAL AGENTS AT ONCE
+    Each agent repository runs its own sandbox (its own compose project;
+    the port is picked automatically). All of them share one token
+    refresh: `up' starts it once, `down' stops it only in the last
+    running sandbox.
 
 EXIT STATUS
     The exit status of sandbox.sh for the commands it runs.

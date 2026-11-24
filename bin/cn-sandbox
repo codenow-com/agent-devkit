@@ -6,14 +6,15 @@
 #   cn-sandbox status           the agent's identity, Workforce onboarding and console URL, then sandbox.sh status
 #   cn-sandbox token            write your own access token (oidc-agent) to the token file, once
 #   cn-sandbox token --watch    the same every 45 s until stopped
-#   cn-sandbox token --stop     stop the background refresh that `up` started
+#   cn-sandbox token --stop     stop the background refresh that `up` started, for every sandbox
 #   cn-sandbox up --as-me       write the developer identity block into the agent's .env, then `up`
 #   cn-sandbox as-me off|status remove the block (and stop the refresh) | show it and the stored values
 #
 # With CN_IDENTITY_PROVIDER=developer (in the environment or the agent's .env) the agent runs under your own identity:
-# `up` writes the token and starts `token --watch` in the background, `down` stops it. Settings: CN_OIDC_ACCOUNT (the
-# oidc-agent account, default cn-agw), CN_IDENTITY_TOKEN_FILE (default ~/.codenow/sandbox-token/token). Every other
-# `token ...` (e.g. `token person <name>`) goes to the agent's sandbox.sh.
+# `up` writes the token and starts `token --watch` in the background once for all sandboxes (the agent repositories
+# that use it are listed next to the token), `down` stops it when no other sandbox uses it. Settings: CN_OIDC_ACCOUNT
+# (the oidc-agent account, default cn-agw), CN_IDENTITY_TOKEN_FILE (default ~/.codenow/sandbox-token/token). Every
+# other `token ...` (e.g. `token person <name>`) goes to the agent's sandbox.sh.
 set -euo pipefail
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do d="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"; case "$src" in /*) ;; *) src="$d/$src" ;; esac; done
@@ -49,7 +50,7 @@ if [ "${1:-}" = token ]; then
       say "token of $(token_account) written to $file (valid at least ${TOKEN_SECONDS} s; keep it fresh with: cn-sandbox token --watch)"
       exit 0 ;;
     --watch) token_watch "$(token_file_path "$env_file")" ;;
-    --stop) watch_stop "$(token_file_path "$env_file")"; exit 0 ;;
+    --stop) token_share_clear "$(token_file_path "$env_file")"; exit 0 ;;
   esac
 fi
 
@@ -59,8 +60,7 @@ if [ "${1:-}" = as-me ]; then
   case "${2:-}" in
     off)
       asme_off "$env_file"
-      file="$(token_file_path "$env_file")"
-      if watch_alive "$file" >/dev/null; then watch_stop "$file"; fi
+      token_share_stop "$(token_file_path "$env_file")" "$root"
       exit 0 ;;
     status) asme_status "$env_file"; exit 0 ;;
     *) cn_usage_error cn-sandbox "as-me needs off or status" ;;
@@ -84,19 +84,21 @@ case "${1:-}" in
       file="$(token_file_path "$env_file")"
       token_write "$file" || die "no token: the sandbox under your own identity needs oidc-token $(token_account)"
       export CN_IDENTITY_TOKEN_FILE="$file"   # the sandbox copies the token from here
-      watch_start "$file" "$self"
+      token_share_start "$file" "$root" "$(asme_project "$root")" "$self"
     fi
     rc=0; bash sandbox/sandbox.sh "$@" || rc=$?
+    if [ "$rc" != 0 ] && developer_mode; then token_share_stop "$(token_file_path "$env_file")" "$root"; fi
     [ "$rc" != 0 ] || say "console: $(asme_console "$root") (log in on localhost, not on 127.0.0.1)"
     exit "$rc" ;;
   status)
     load_config
     asme_identity "$root" "$env_file"
+    file="$(token_file_path "$env_file")"
+    if developer_mode || watch_alive "$file" >/dev/null; then token_share_status "$file"; fi
     exec bash sandbox/sandbox.sh "$@" ;;
   down)
     rc=0; bash sandbox/sandbox.sh "$@" || rc=$?
-    file="$(token_file_path "$env_file")"
-    if watch_alive "$file" >/dev/null; then watch_stop "$file"; fi
+    token_share_stop "$(token_file_path "$env_file")" "$root"
     exit "$rc" ;;
   *) exec bash sandbox/sandbox.sh "$@" ;;
 esac
