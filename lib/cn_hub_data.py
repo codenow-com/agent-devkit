@@ -3,7 +3,7 @@
     /s/<project>/runs[?status=&pipeline=&since=&page=]   /api/s/<project>/runs
     /s/<project>/runs/<run_id>                            /api/s/<project>/runs/<run_id>
     /s/<project>/valkey[?pattern=]                        /api/s/<project>/valkey/keys[?pattern=]
-    /s/<project>/valkey/<key>[?before=&kind=]             /api/s/<project>/valkey/key?key=[&before=&kind=]
+    /s/<project>/valkey/<key>[?before=&kind=&exclude=]    /api/s/<project>/valkey/key?key=[&before=&kind=&exclude=]
     /s/<project>/search?q=                                /api/s/<project>/search?q=
 
 `<project>` must be one of the sandboxes the hub found in Docker. Everything here only reads, and every answer is
@@ -90,7 +90,8 @@ def api_route(sb, sub: str, query: dict) -> tuple:
     if sub == "valkey/key":
         if not query.get("key"):
             return as_json(400, {"error": "key= is missing"})
-        return as_json(200, valkey.key_view(sb, query["key"], query.get("before", ""), query.get("kind", "")))
+        return as_json(200, valkey.key_view(sb, query["key"], query.get("before", ""), query.get("kind", ""),
+                                                 valkey.parse_exclude(query.get("exclude"))))
     if sub == "search":
         return as_json(200, search.search(sb, query.get("q", "")))
     return as_json(404, {"error": "not found"})
@@ -109,8 +110,9 @@ def page_route(sb, sub: str, query: dict) -> tuple:
         return as_html(200, render_valkey.keys_page(project, valkey.keys(sb, query.get("pattern") or "*")))
     if sub.startswith("valkey/"):
         key = unquote(sub[len("valkey/"):])
-        return as_html(200, render_valkey.key_page(project, valkey.key_view(sb, key, query.get("before", ""),
-                                                                              query.get("kind", ""))))
+        view = valkey.key_view(sb, key, query.get("before", ""), query.get("kind", ""),
+                               valkey.parse_exclude(query.get("exclude")))
+        return as_html(200, render_valkey.key_page(project, view))
     if sub == "search":
         return as_html(200, render_valkey.search_page(project, search.search(sb, query.get("q", ""))))
     return as_html(404, render_runs.shell("Not found", project, "<p class=\"err\">No such page.</p>"))

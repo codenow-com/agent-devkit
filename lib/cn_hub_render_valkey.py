@@ -5,6 +5,7 @@ Pure functions of the data that cn_hub_valkey and cn_hub_search returned (alread
 from __future__ import annotations
 
 from cn_hub_render import chip, cut, e
+from cn_hub_render_exclude import stream_hidden_line, stream_script, stream_x
 from cn_hub_render_runs import href, pretty, shell, status_chip, when
 
 EVENT_KINDS = ("run_accepted", "run_started", "stage_started", "stage_ended", "stage_stats", "llm_started",
@@ -68,11 +69,16 @@ def pairs_table(pairs: list, left: str, right: str) -> str:
 
 
 def stream_body(project: str, key: str, data: dict) -> str:
-    current = data.get("kind") or ""
+    current, exclude = data.get("kind") or "", list(data.get("exclude") or [])
+
+    def link_of(kinds, before=None):
+        return href(project, "valkey", key, before=before, kind=current, exclude=",".join(kinds))
     options = '<option value="">all</option>' + "".join(
         f'<option value="{e(k)}"{" selected" if k == current else ""}>{e(k)}</option>' for k in EVENT_KINDS)
     form = (f'<form class="bar" method="get" action="{e(href(project, "valkey", key))}"><label>event kind'
-            f'<select name="kind">{options}</select></label><button type="submit">Show</button>'
+            f'<select name="kind">{options}</select></label>'
+            + (f'<input type="hidden" name="exclude" value="{e(",".join(exclude))}">' if exclude else "")
+            + '<button type="submit">Show</button>'
             f'<span class="note">newest first, 50 per page</span></form>')
     rows = []
     for entry in data.get("entries") or []:
@@ -83,16 +89,21 @@ def stream_body(project: str, key: str, data: dict) -> str:
         brief = " ".join(str(event[k]) for k in ("pipeline", "stage", "tool", "status", "summary", "text")
                          if event.get(k) not in (None, ""))
         fields = event if event else entry.get("fields")
+        kind = str(event.get("kind") or "")
+        after = exclude + [kind] if kind and kind not in exclude else exclude
         rows.append(f'<tr><td class="mono">{e(entry["id"])}</td><td class="mono">{e(when(entry.get("ms")))}</td>'
-                    f'<td>{e(event.get("kind") or "")}</td><td>{run_link}</td><td>{e(cut(brief, 120))}</td>'
+                    f'<td>{e(kind)}{stream_x(kind, link_of(after), after)}</td><td>{run_link}</td>'
+                    f'<td>{e(cut(brief, 120))}</td>'
                     f'<td><details><summary>fields</summary>{pretty(fields)}</details></td></tr>')
     table = ('<div class="tw"><table class="data"><thead><tr><th>entry id</th><th>time (UTC)</th><th>kind</th>'
              '<th>run</th><th>about</th><th></th></tr></thead><tbody>'
              + ("".join(rows) or '<tr><td colspan="6" class="note">No entry.</td></tr>') + "</tbody></table></div>")
-    pager = [f'<a href="{e(href(project, "valkey", key, kind=current))}">newest</a>']
+    pager = [f'<a href="{e(link_of(exclude))}">newest</a>']
     if data.get("next"):
-        pager.append(f'<a href="{e(href(project, "valkey", key, before=data["next"], kind=current))}">older</a>')
-    return form + table + '<div class="pager">' + " ".join(pager) + "</div>"
+        pager.append(f'<a href="{e(link_of(exclude, data["next"]))}">older</a>')
+    store = f"cn-hub-exclude:{project}:{key}"
+    return (form + stream_hidden_line(data, link_of) + table + '<div class="pager">' + " ".join(pager) + "</div>"
+            + stream_script(store))
 
 
 def search_page(project: str, data: dict) -> str:

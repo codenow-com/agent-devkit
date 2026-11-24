@@ -230,7 +230,7 @@ example `sandbox-customs-tariff-advisor`):
 | `/s/<project>/runs` | `/api/s/<project>/runs` | the run store's runs, newest first, 50 per page: time, pipeline, subject, status, duration, cost, `developer` and `env_class`; filters `status=`, `pipeline=`, `since=1h\|24h\|7d\|30d`, `page=` |
 | `/s/<project>/runs/<run_id>` | `/api/s/<project>/runs/<run_id>` | one run: stages on a timeline, tool calls (arguments, result, duration), summary, error, output, halt handoff, facts, cost and tokens, its events from `swarm:events` (each links to its place in the stream), and the whole row as JSON |
 | `/s/<project>/valkey` | `/api/s/<project>/valkey/keys?pattern=` | the keys of a pattern (`SCAN`, at most 1000) with type, TTL and size |
-| `/s/<project>/valkey/<key>` | `/api/s/<project>/valkey/key?key=` | one key: a stream newest first (50 per page, `before=<id>`, filter `kind=`), hash fields, list items, set and sorted-set members, the first 4 KB of a string |
+| `/s/<project>/valkey/<key>` | `/api/s/<project>/valkey/key?key=` | one key: a stream newest first (50 per page, `before=<id>`, filter `kind=`, hide kinds with `exclude=a,b` or the ✕ next to a kind, remembered per key in the browser), hash fields, list items, set and sorted-set members, the first 4 KB of a string |
 | `/s/<project>/search?q=` | `/api/s/<project>/search?q=` | runs (id prefix, subject, pipeline, status, summary, error, output), events (the newest 5000 entries of `swarm:events` and `swarm:debug`) and key names |
 
 The run store and Valkey are not published to your computer: the hub reads them with `docker exec` into the

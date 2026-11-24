@@ -1,6 +1,7 @@
 """The HTML of the hub's data views, part 1: the page shell and tabs, the runs list and one run in detail.
 
-Pure functions of the data that cn_hub_runs returned (already masked); every value is escaped here; no script.
+Pure functions of the data that cn_hub_runs returned (already masked); every value is escaped here; the only
+script hides event kinds on a run's event list (cn_hub_render_exclude).
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import json
 from urllib.parse import quote, urlencode
 
 from cn_hub_render import STYLE, chip, cut, e
+from cn_hub_render_exclude import EXCLUDE_STYLE, RUN_HIDDEN_LINE, RUN_SCRIPT, run_x
 
 EXTRA_STYLE = """
 main.wide{max-width:1400px}
@@ -114,7 +116,8 @@ def shell(title: str, project: str, body: str, active: str = "") -> str:
     return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<meta name=\"color-scheme\" content=\"light dark\">"
-            f"<title>{e(title)}</title><style>{STYLE}{EXTRA_STYLE}</style></head><body><main class=\"wide\">"
+            f"<title>{e(title)}</title><style>{STYLE}{EXTRA_STYLE}{EXCLUDE_STYLE}</style></head>"
+            "<body><main class=\"wide\">"
             f"{head}<h1>{e(title)}</h1>{tabs(project, active) if project else ''}{body}</main></body></html>")
 
 
@@ -276,14 +279,16 @@ def events_panel(project: str, data: dict) -> str:
         brief = " ".join(str(event[k]) for k in ("stage", "tool", "status", "summary") if event.get(k) not in
                          (None, ""))
         link = href(project, "valkey", "swarm:events", before=next_id(entry["id"]))
-        rows.append(f'<tr><td class="mono"><a href="{e(link)}">{e(entry["id"])}</a></td>'
-                    f'<td class="mono">{e(when(entry.get("ms")))}</td><td>{e(event.get("kind"))}</td>'
+        kind = str(event.get("kind") or "")
+        rows.append(f'<tr data-kind="{e(kind)}"><td class="mono"><a href="{e(link)}">{e(entry["id"])}</a></td>'
+                    f'<td class="mono">{e(when(entry.get("ms")))}</td><td>{e(kind)}{run_x(kind)}</td>'
                     f'<td>{e(cut(brief, 120))}</td><td><details><summary>fields</summary>{pretty(event)}'
                     + (f'<b>content</b>{pretty(entry["content"])}' if entry.get("content") else "")
                     + "</details></td></tr>")
-    return (f'<div class="panel"><h2>Events ({len(events)}, from swarm:events)</h2><div class="tw">'
-            '<table class="data"><thead><tr><th>entry id</th><th>time (UTC)</th><th>kind</th><th>about</th>'
-            '<th></th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div></div>")
+    return (f'<div class="panel"><h2>Events ({len(events)}, from swarm:events)</h2>{RUN_HIDDEN_LINE}<div class="tw">'
+            '<table class="data" id="run-events"><thead><tr><th>entry id</th><th>time (UTC)</th><th>kind</th>'
+            '<th>about</th>'
+            '<th></th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div></div>" + RUN_SCRIPT)
 
 
 def next_id(entry_id: str) -> str:
