@@ -33,6 +33,7 @@ FAKES = {
                   'python3 -c \'import base64, json, os\n'
                   'b = lambda o: base64.urlsafe_b64encode(json.dumps(o).encode()).decode().rstrip("=")\n'
                   'c = {"aud": os.environ["FAKE_AUD"], "azp": os.environ.get("FAKE_AZP", "' + CLIENT + '"),\n'
+                  '     "iss": "' + ISSUER + '",\n'
                   '     "preferred_username": "demotenant"}\n'
                   'print(b({"alg": "RS256"}) + "." + b(c) + ".SECRETSIG")\'\n',
     "brew": 'echo "brew $*" >> "$FAKE_STATE/brew.log"\n',
@@ -155,6 +156,26 @@ class GatewayStepTest(unittest.TestCase):
         bad = self.run_setup("--check", "--only-gateway", FAKE_AUD="https://other.example")
         self.assertEqual(bad.returncode, 1)
         self.assertIn("lacks the gateway", bad.stdout)
+
+    def test_an_existing_account_gives_the_values_without_questions(self):
+        # Petr's case: the account cn-agw was made by hand (README), cn-setup has no gateway values yet.
+        (self.state / "accounts").write_text("cn-agw\n")
+        pkce_dir = self.home / ".config" / "oidc-agent"
+        pkce_dir.mkdir(parents=True)
+        (pkce_dir / "custom_parameters.config").write_text(json.dumps([
+            {"parameter": p, "value": "x", "for_account": ["cn-agw"], "request": ["device-init"]}
+            for p in ("code_challenge", "code_challenge_method", "code_verifier")]))
+        (self.home / ".zshrc").write_text('eval "$(oidc-agent-service use)" > /dev/null\n')
+        out = self.run_setup("--only-gateway", answers="")
+        text = out.stdout + out.stderr
+        self.assertEqual(out.returncode, 0, text)
+        self.assertIn("values from your oidc-agent account cn-agw", text)
+        self.assertNotIn("environment of your agent gateway", text)
+        config = self.config()
+        for line in (f"CODENOW_IAM_ISSUER={ISSUER}", f"CODENOW_AGW_CLIENT_ID={CLIENT}", f"CODENOW_AGW_URL={self.base}"):
+            self.assertIn(line, config)
+        self.assertIn("developer identity: all good", text)
+        self.assertNotIn("SECRETSIG", text)
 
     def test_without_a_terminal_and_without_values_it_says_what_is_missing(self):
         out = self.run_setup("--only-gateway")

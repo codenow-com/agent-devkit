@@ -57,11 +57,49 @@ servers = json.load(sys.stdin).get("authorization_servers") or []
 print(servers[0] if servers and isinstance(servers[0], str) else "")'
 }
 
+# gw_from_token: an existing oidc-agent account already knows the values: the token's iss (issuer), azp (client) and
+# the https audience that is not the issuer (the gateway). Prints "iss azp aud" or nothing; never the token.
+gw_from_token() {
+  local token
+  have oidc-token || return 1
+  if [ -z "${OIDC_SOCK:-}" ] && have oidc-agent-service; then eval "$(oidc-agent-service use 2>/dev/null)" >/dev/null 2>&1 || true; fi
+  token="$(oidc-token --time=60 "$(gw_account)" 2>/dev/null </dev/null)" || return 1
+  [ -n "$token" ] || return 1
+  printf '%s' "$token" | python3 -I -c '
+import base64, json, sys
+try:
+    p = sys.stdin.read().split(".")[1]
+    c = json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)))
+except Exception:
+    sys.exit(1)
+iss, azp, aud = c.get("iss") or "", c.get("azp") or "", c.get("aud") or []
+aud = [aud] if isinstance(aud, str) else aud
+urls = [a for a in aud if isinstance(a, str) and a != iss and a.startswith(("https://", "http://localhost", "http://127.0.0.1"))]
+gw = next((a for a in urls if "agent-gateway" in a), "") or (urls[0] if urls else "")
+if iss and azp and gw:
+    print(iss, azp, gw.rstrip("/"))'
+}
+
 # 1. Values: derived where possible, asked once, stored in ~/.codenow/config.
 gw_values() {
-  local found="" tenant environment="" client_default=""
+  local found="" tenant environment="" client_default="" from_token iss azp aud
   CN_OIDC_ACCOUNT="$(gw_account)"
   save_setting CN_OIDC_ACCOUNT "$CN_OIDC_ACCOUNT"
+  if [ -z "${CODENOW_IAM_ISSUER:-}" ] || [ -z "${CODENOW_AGW_CLIENT_ID:-}" ] || [ -z "${CODENOW_AGW_URL:-}" ]; then
+    from_token="$(gw_from_token || true)"
+    if [ -n "$from_token" ]; then
+      read -r iss azp aud <<<"$from_token"
+      say "values from your oidc-agent account $CN_OIDC_ACCOUNT: issuer $iss, client $azp, gateway $aud"
+      [ -n "${CODENOW_IAM_ISSUER:-}" ] || CODENOW_IAM_ISSUER="$iss"
+      [ -n "${CODENOW_AGW_CLIENT_ID:-}" ] || CODENOW_AGW_CLIENT_ID="$azp"
+      [ -n "${CODENOW_AGW_URL:-}" ] || CODENOW_AGW_URL="$aud"
+      if [ -z "${GW_REPORT:-}" ]; then   # cn-doctor only reports; cn-setup stores them
+        save_setting CODENOW_IAM_ISSUER "$CODENOW_IAM_ISSUER"
+        save_setting CODENOW_AGW_CLIENT_ID "$CODENOW_AGW_CLIENT_ID"
+        save_setting CODENOW_AGW_URL "$CODENOW_AGW_URL"
+      fi
+    fi
+  fi
   if [ -z "${CODENOW_IAM_ISSUER:-}" ] && [ -n "${CODENOW_MCP_URL:-}" ]; then
     found="$(gw_issuer_from_mcp || true)"
     [ -z "$found" ] || say "IAM issuer from the MCP server's metadata: $found"
